@@ -6,6 +6,23 @@ from .. import models
 
 router = APIRouter(prefix="/used-car", tags=["used_car"])
 
+@router.get("/")
+def list_used_car(db: Session = Depends(get_db)):
+    rows = db.query(models.UsedCar).all()
+    return [
+        {
+            "vehicle_id": r.vehicle_id,
+            "engine_score": r.engine_score,
+            "battery_score": r.battery_score,
+            "tire_score": r.tire_score,
+            "brake_score": r.brake_score,
+            "fuel_efficiency_score": r.fuel_efficiency_score,
+            "overall_grade": r.overall_grade,
+            "analysis_date": r.analysis_date.isoformat() if r.analysis_date else None,
+        }
+        for r in rows
+    ]
+
 
 @router.get("/{vehicle_id}")
 def get_used_car(vehicle_id: str, db: Session = Depends(get_db)):

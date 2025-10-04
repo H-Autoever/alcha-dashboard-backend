@@ -48,24 +48,24 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}                           # Git 커밋 해시를 이미지 태그로 사용
         run: |
           # Docker 이미지 빌드 (커밋 해시 태그)
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker build -t $ECR_REGISTRY:$IMAGE_TAG .
           
           # Docker 이미지 빌드 (latest 태그)
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker build -t $ECR_REGISTRY:latest .
           
           # ECR에 커밋 해시 태그 이미지 푸시
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY:$IMAGE_TAG
           
           # ECR에 latest 태그 이미지 푸시
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY:latest
           
           # 다음 단계에서 사용할 수 있도록 이미지 URI를 출력에 저장
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "image=$ECR_REGISTRY:$IMAGE_TAG" >> $GITHUB_OUTPUT
       
       # 빌드 결과 출력
       - name: Print image URI
         run: |
           echo "Docker image pushed successfully!"
           echo "Image URI: ${{ steps.build-image.outputs.image }}"
-          echo "Latest tag: ${{ env.ECR_URL }}/${{ env.ECR_REPOSITORY }}:latest"
+          echo "Latest tag: ${{ env.ECR_URL }}:latest"
 

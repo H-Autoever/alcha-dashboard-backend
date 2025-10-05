@@ -8,6 +8,7 @@ on:
       - 'app/**'                                    # 백엔드 앱 코드 변경 시
       - 'requirements.txt'                          # Python 의존성 변경 시
       - 'Dockerfile'                                # Docker 설정 변경 시
+      - 'k8s/**'                                    # Kubernetes 매니페스트 변경 시
       - '.github/workflows/backend-deploy.yml'      # 이 워크플로우 파일 변경 시
 
 # 환경 변수 설정

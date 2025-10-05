@@ -3,13 +3,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  # 서비스 이름 (팀원 파일과 동일)
+  # 서비스 이름 
   name: alcha-dashboard-backend-svc  
   # 네임스페이스 명시
   namespace: default  
 spec:
-  # 외부에서 접근 가능한 로드밸런서 타입
-  type: LoadBalancer  
+  # 클러스터 내부에서만 접근 가능한 서비스 타입 (Ingress에서 사용)
+  type: ClusterIP
   selector:
     # 연결할 파드 선택 (Deployment의 라벨과 일치)
     app: alcha-dashboard-backend  
@@ -18,4 +18,4 @@ spec:
       # 서비스 포트 (백엔드 API 포트)
       port: 8000        
       # 컨테이너 포트 (실제 애플리케이션이 실행되는 포트)
-      targetPort: 8000  
+      targetPort: 8000

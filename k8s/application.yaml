@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alcha-dashboard-backend
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argocd.argoproj.io
+  annotations:
+    # 1. 업데이트할 이미지 목록과 alias (backend) 정의
+    argocd-image-updater.argoproj.io/image-list: backend=577012215958.dkr.ecr.ap-northeast-2.amazonaws.com/alcha/dashboard-backend
+    
+    # 2. 가장 최근에 푸시된 태그를 사용하도록 설정
+    argocd-image-updater.argoproj.io/backend.update-strategy: newest-build
+    
+    # 3. 유효한 태그 패턴 정의 (커밋 SHA 태그 사용)
+    argocd-image-updater.argoproj.io/backend.allow-tags: regexp:^[0-9a-f]{40}$
+    
+    # 4. Kustomize 이미지 태그 업데이트 위치 지정
+    argocd-image-updater.argoproj.io/backend.kustomize.image: 577012215958.dkr.ecr.ap-northeast-2.amazonaws.com/alcha/dashboard-backend
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/H-Autoever/alcha-dashboard-backend.git
+    targetRevision: HEAD
+    path: k8s
+    kustomize: {}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

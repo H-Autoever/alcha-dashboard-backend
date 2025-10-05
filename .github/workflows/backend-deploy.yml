@@ -70,3 +70,20 @@ jobs:
           echo "Image URI: ${{ steps.build-image.outputs.image }}"
           echo "Latest tag: ${{ env.ECR_URL }}:latest"
 
+      # ArgoCD 애플리케이션 동기화
+      - name: Sync ArgoCD Application
+        run: |
+          # ArgoCD CLI 설치
+          curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+          rm argocd-linux-amd64
+          
+          # ArgoCD 서버에 로그인
+          argocd login ${{ secrets.ARGOCD_SERVER_URL }} \
+            --username ${{ secrets.ARGOCD_USERNAME }} \
+            --password ${{ secrets.ARGOCD_PASSWORD }} \
+            --insecure
+          
+          # 백엔드 애플리케이션 동기화
+          argocd app sync alcha-dashboard-backend --force
+

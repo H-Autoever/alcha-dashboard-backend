@@ -1,0 +1,54 @@
+# dashboard-backend 애플리케이션을 배포하기 위한 Deployment 리소스 정의
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # Deployment 이름
+  name: alcha-dashboard-backend  
+  # 네임스페이스 명시
+  namespace: default
+  labels:
+    # 애플리케이션 라벨
+    app: alcha-dashboard-backend  
+spec:
+  # 실행할 파드 개수 
+  replicas: 1  
+  selector:
+    matchLabels:
+      # 파드 선택을 위한 라벨
+      app: alcha-dashboard-backend  
+  template:
+    metadata:
+      labels:
+        # 파드 (애플리케이션) 라벨 
+        app: alcha-dashboard-backend 
+    spec:
+      containers:
+      # 컨테이너 이름
+      - name: alcha-dashboard-backend  
+        # ECR에 저장된 백엔드 이미지 
+        image: 577012215958.dkr.ecr.ap-northeast-2.amazonaws.com/alcha/dashboard-backend:latest
+        ports:
+        # 컨테이너 내부 포트 (백엔드 API 포트)
+        - containerPort: 8000  
+        envFrom:
+        - configMapRef:
+            # 환경변수 설정을 위한 ConfigMap 참조
+            name: alcha-dashboard-config
+        env: 
+        - name: DATABASE_URL
+          value: "mysql+pymysql://$(MYSQL_USER):$(MYSQL_PASSWORD)@$(MYSQL_HOST):$(MYSQL_PORT)/$(MYSQL_DB_NAME)"
+        - name: ENV
+          value: "kubernetes"  
+        resources:
+          # 최소 리소스 요구사항
+          requests:  
+            memory: "512Mi"  # 최소 메모리 512MB
+            cpu: "250m"     # 최소 CPU 0.25 코어
+          # 최대 리소스 제한        
+          limits:    
+            memory: "1Gi"  # 최대 메모리 1GB
+            cpu: "500m"      # 최대 CPU 0.5 코어
+      # ECR 이미지 다운로드를 위한 인증 시크릿
+      imagePullSecrets:
+      - name: ecr-registry-secret  

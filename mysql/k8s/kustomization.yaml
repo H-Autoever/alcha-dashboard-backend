@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - alcha-mysql-statefulset.yaml
+  - alcha-mysql-service.yaml
+  - alcha-mysql-secret.yaml
+  - alcha-mysql-initdb-config.yaml

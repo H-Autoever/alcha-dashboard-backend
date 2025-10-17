@@ -1,0 +1,12 @@
+# .coderabbit.yaml
+language: ko  # 리뷰 언어
+reviews:
+  enable_auto_review: true       # PR 생성 시 자동 리뷰
+  auto_review_on_draft: false    # Draft PR은 리뷰하지 않음
+  auto_review_on_changes: true   # 수정 시 재리뷰
+  summarize_in_thread: true      # 코멘트를 PR 스레드로 요약
+
+review_rules:
+  - "PR 제목과 커밋 메시지는 명확해야 한다."
+  - "함수는 하나의 책임만 가져야 한다."
+  - "불필요한 로그나 디버깅 코드는 제거되어야 한다."

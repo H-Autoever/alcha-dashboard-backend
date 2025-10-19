@@ -12,7 +12,6 @@ class BasicInfo(Base):
     total_distance = Column(Float)
     average_speed = Column(Float)
     fuel_efficiency = Column(Float)
-    collision_events = Column(Text)
     analysis_date = Column(Date)
 
 

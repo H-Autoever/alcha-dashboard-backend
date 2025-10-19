@@ -57,7 +57,6 @@ def get_vehicle_detail(vehicle_id: str, db: Session = Depends(get_db)):
             "total_distance": row.total_distance,
             "average_speed": row.average_speed,
             "fuel_efficiency": row.fuel_efficiency,
-            "collision_events": row.collision_events,
         })
     
     return vehicle_info

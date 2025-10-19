@@ -12,51 +12,50 @@ router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 @router.get("/", response_model=List[Dict[str, Any]])
 def list_vehicles(db: Session = Depends(get_db)):
-    # 각 차량의 최신 데이터만 반환 (메인 페이지용)
-    subquery = db.query(
-        models.BasicInfo.vehicle_id,
-        models.BasicInfo.model,
-        func.max(models.BasicInfo.analysis_date).label('latest_date')
-    ).group_by(models.BasicInfo.vehicle_id, models.BasicInfo.model).subquery()
-    
-    rows = db.query(subquery.c.vehicle_id, subquery.c.model).all()
-    return [{"vehicle_id": r[0], "model": r[1]} for r in rows]
+    # vehicles 테이블에서 모든 차량 정보 반환 (메인 페이지용)
+    vehicles = db.query(models.Vehicle).all()
+    return [{"vehicle_id": v.vehicle_id, "model": v.model} for v in vehicles]
 
 
 @router.get("/summary", response_model=Dict[str, int])
 def vehicles_summary(db: Session = Depends(get_db)):
-    total = db.query(models.BasicInfo).count()
+    total = db.query(models.Vehicle).count()
     return {"total_vehicles": total}
 
 
 @router.get("/{vehicle_id}")
 def get_vehicle_detail(vehicle_id: str, db: Session = Depends(get_db)):
-    # 특정 차량의 모든 날짜별 데이터를 반환 (상세페이지용)
-    rows = db.query(models.BasicInfo).filter(
-        models.BasicInfo.vehicle_id == vehicle_id
-    ).order_by(models.BasicInfo.analysis_date.desc()).all()
+    # vehicles 테이블에서 차량 기본 정보 조회
+    vehicle = db.query(models.Vehicle).filter(
+        models.Vehicle.vehicle_id == vehicle_id
+    ).first()
     
-    print(f"DEBUG: Found {len(rows)} rows for vehicle_id {vehicle_id}")
-    
-    if not rows:
+    if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
     
-    # 첫 번째 행에서 기본 정보 추출
-    first_row = rows[0]
+    # daily_metrics 테이블에서 해당 차량의 모든 일별 데이터 조회
+    daily_metrics = db.query(models.DailyMetrics).filter(
+        models.DailyMetrics.vehicle_id == vehicle_id
+    ).order_by(models.DailyMetrics.analysis_date.desc()).all()
+    
+    print(f"DEBUG: Found {len(daily_metrics)} daily metrics for vehicle_id {vehicle_id}")
+    
+    # 응답 데이터 구성
     vehicle_info = {
-        "vehicle_id": first_row.vehicle_id,
-        "model": first_row.model,
-        "year": first_row.year,
+        "vehicle_id": vehicle.vehicle_id,
+        "model": vehicle.model,
+        "year": vehicle.year,
         "daily_data": []
     }
     
     # 모든 날짜별 데이터 추가
-    for row in rows:
+    for metric in daily_metrics:
         vehicle_info["daily_data"].append({
-            "analysis_date": row.analysis_date.isoformat() if row.analysis_date else None,
-            "total_distance": row.total_distance,
-            "average_speed": row.average_speed,
-            "fuel_efficiency": row.fuel_efficiency,
+            "analysis_date": metric.analysis_date.isoformat() if metric.analysis_date else None,
+            "total_distance": metric.total_distance,
+            "average_speed": metric.average_speed,
+            "fuel_efficiency": metric.fuel_efficiency,
+            "collision_events": None,  # 이제 별도 테이블에서 관리
         })
     
     return vehicle_info

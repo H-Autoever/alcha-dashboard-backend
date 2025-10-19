@@ -3,15 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from .routers import vehicles, used_car, insurance, events
-from .mongodb import connect_to_mongo, close_mongo_connection
+from .timescaledb import init_timescaledb
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 시작 시 MongoDB 연결
-    await connect_to_mongo()
+    # 시작 시 TimescaleDB 초기화
+    init_timescaledb()
     yield
-    # 종료 시 MongoDB 연결 해제
-    await close_mongo_connection()
+    # 종료 시 정리 작업 (필요시)
 
 app = FastAPI(title="Alcha Dashboard API", lifespan=lifespan)
 

@@ -5,7 +5,8 @@ from .db import Base
 class BasicInfo(Base):
     __tablename__ = "basic_info"
 
-    vehicle_id = Column(String(50), primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    vehicle_id = Column(String(50), nullable=False)
     model = Column(String(100), nullable=False)
     year = Column(Integer)
     total_distance = Column(Float)

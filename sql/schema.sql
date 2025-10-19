@@ -1,14 +1,16 @@
 -- MySQL schema for Alcha Dashboard
 
 CREATE TABLE IF NOT EXISTS basic_info (
-    vehicle_id VARCHAR(50) PRIMARY KEY COMMENT '차량 고유 ID (예: VIN 또는 내부 ID)',
+    id INT AUTO_INCREMENT PRIMARY KEY COMMENT '레코드 고유 ID',
+    vehicle_id VARCHAR(50) NOT NULL COMMENT '차량 고유 ID (예: VIN 또는 내부 ID)',
     model VARCHAR(100) NOT NULL COMMENT '차량 모델명 (예: Tesla Model 3)',
     year INT COMMENT '차량 연식 (예: 2023)',
     total_distance FLOAT COMMENT '총 주행 거리 (km, Redshift에서 SUM 계산)',
     average_speed FLOAT COMMENT '평균 주행 속도 (km/h, Redshift에서 AVG 계산)',
     fuel_efficiency FLOAT COMMENT '연비 (km/L 또는 km/kWh, Redshift에서 SUM(distance)/SUM(fuel) 계산)',
     collision_events TEXT COMMENT '충돌 이력 시점 목록 (comma-separated timestamps, Redshift에서 STRING_AGG(event_time, ",") 계산)',
-    analysis_date DATE COMMENT '데이터 분석 기준 일자'
+    analysis_date DATE COMMENT '데이터 분석 기준 일자',
+    UNIQUE KEY unique_vehicle_date (vehicle_id, analysis_date) COMMENT '차량 ID와 분석 날짜의 유니크 조합'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='메인 기능용 기본 차량 정보 테이블';
 
 CREATE TABLE IF NOT EXISTS used_car (

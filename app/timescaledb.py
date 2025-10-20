@@ -69,15 +69,33 @@ def init_timescaledb():
             );
         """)
         
+        # 차량 텔레메트리 테이블 생성 (1초 단위 시계열 데이터)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS vehicle_telemetry (
+                id SERIAL,
+                vehicle_id VARCHAR(50) NOT NULL,
+                vehicle_speed FLOAT,
+                engine_rpm INTEGER,
+                throttle_position FLOAT,
+                timestamp TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                PRIMARY KEY (id, timestamp)
+            );
+        """)
+        
         # TimescaleDB 하이퍼테이블로 변환
         cursor.execute("SELECT create_hypertable('engine_off_events', 'timestamp', if_not_exists => TRUE);")
         cursor.execute("SELECT create_hypertable('collision_events', 'timestamp', if_not_exists => TRUE);")
+        cursor.execute("SELECT create_hypertable('vehicle_telemetry', 'timestamp', if_not_exists => TRUE);")
         
         # 인덱스 생성
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_engine_off_vehicle_id ON engine_off_events(vehicle_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_engine_off_timestamp ON engine_off_events(timestamp);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_collision_vehicle_id ON collision_events(vehicle_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_collision_timestamp ON collision_events(timestamp);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_vehicle_id ON vehicle_telemetry(vehicle_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_timestamp ON vehicle_telemetry(timestamp);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_vehicle_time ON vehicle_telemetry(vehicle_id, timestamp DESC);")
         
         conn.commit()
         print("TimescaleDB 초기화 완료")
@@ -134,6 +152,111 @@ def write_collision_event(vehicle_id: str, damage: int, timestamp: str):
         print(f"Failed to write collision event: {e}")
         conn.rollback()
         return False
+    finally:
+        conn.close()
+
+def write_telemetry_data(vehicle_id: str, vehicle_speed: float, engine_rpm: int, 
+                        throttle_position: float, timestamp: str):
+    """차량 텔레메트리 데이터를 TimescaleDB에 기록"""
+    conn = get_timescaledb_connection()
+    if not conn:
+        return False
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO vehicle_telemetry (vehicle_id, vehicle_speed, engine_rpm, throttle_position, timestamp)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (vehicle_id, vehicle_speed, engine_rpm, throttle_position, timestamp))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Failed to write telemetry data: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+def batch_write_telemetry_data(data_list: List[Dict[str, Any]]):
+    """배치로 텔레메트리 데이터 기록 (성능 최적화)"""
+    conn = get_timescaledb_connection()
+    if not conn:
+        return False
+    
+    try:
+        cursor = conn.cursor()
+        
+        # 배치 삽입
+        args = [(
+            d['vehicle_id'],
+            d['vehicle_speed'],
+            d['engine_rpm'],
+            d['throttle_position'],
+            d['timestamp']
+        ) for d in data_list]
+        
+        cursor.executemany("""
+            INSERT INTO vehicle_telemetry (vehicle_id, vehicle_speed, engine_rpm, throttle_position, timestamp)
+            VALUES (%s, %s, %s, %s, %s)
+        """, args)
+        
+        conn.commit()
+        print(f"Successfully wrote {len(data_list)} telemetry records")
+        return True
+    except Exception as e:
+        print(f"Failed to batch write telemetry data: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+def get_telemetry_data(vehicle_id: str, start_time: str = None, end_time: str = None) -> List[Dict[str, Any]]:
+    """특정 차량의 텔레메트리 데이터 조회"""
+    conn = get_timescaledb_connection()
+    if not conn:
+        return []
+    
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # 시간 범위 조건 설정
+        time_condition = ""
+        params = [vehicle_id]
+        
+        if start_time and end_time:
+            time_condition = "AND timestamp BETWEEN %s AND %s"
+            params.extend([start_time, end_time])
+        elif start_time:
+            time_condition = "AND timestamp >= %s"
+            params.append(start_time)
+        elif end_time:
+            time_condition = "AND timestamp <= %s"
+            params.append(end_time)
+        
+        query = f"""
+            SELECT vehicle_id, vehicle_speed, engine_rpm, throttle_position, timestamp
+            FROM vehicle_telemetry
+            WHERE vehicle_id = %s {time_condition}
+            ORDER BY timestamp ASC
+        """
+        
+        cursor.execute(query, params)
+        telemetry_data = []
+        for row in cursor.fetchall():
+            telemetry_data.append({
+                "vehicle_id": row["vehicle_id"],
+                "vehicle_speed": row["vehicle_speed"],
+                "engine_rpm": row["engine_rpm"],
+                "throttle_position": row["throttle_position"],
+                "timestamp": row["timestamp"].isoformat()
+            })
+        
+        return telemetry_data
+        
+    except Exception as e:
+        print(f"Failed to query telemetry data: {e}")
+        return []
     finally:
         conn.close()
 

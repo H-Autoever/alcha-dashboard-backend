@@ -7,8 +7,15 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.timescaledb import init_timescaledb, write_engine_off_event, write_collision_event
-from datetime import datetime
+from app.timescaledb import (
+    init_timescaledb, 
+    write_engine_off_event, 
+    write_collision_event,
+    batch_write_telemetry_data,
+    get_timescaledb_connection
+)
+from datetime import datetime, timedelta
+import random
 
 # 마이그레이션할 데이터 (기존 MongoDB 데이터)
 MOCK_EVENTS_DATA = {
@@ -109,11 +116,87 @@ MOCK_EVENTS_DATA = {
     ]
 }
 
+def clear_existing_data():
+    """기존 데이터 초기화 (다른 환경에서 실행할 때 사용)"""
+    print("🗑️  기존 데이터 초기화 중...")
+    conn = get_timescaledb_connection()
+    if not conn:
+        print("❌ 데이터베이스 연결 실패")
+        return False
+    
+    try:
+        cursor = conn.cursor()
+        
+        # 기존 테이블 삭제
+        cursor.execute("DROP TABLE IF EXISTS engine_off_events CASCADE;")
+        cursor.execute("DROP TABLE IF EXISTS collision_events CASCADE;")
+        cursor.execute("DROP TABLE IF EXISTS vehicle_telemetry CASCADE;")
+        
+        conn.commit()
+        print("✅ 기존 데이터 초기화 완료")
+        return True
+    except Exception as e:
+        print(f"❌ 데이터 초기화 실패: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+def generate_telemetry_data():
+    """1시간치 텔레메트리 데이터 생성 (VHC-001, VHC-002, VHC-003)"""
+    print("📊 텔레메트리 데이터 생성 중...")
+    
+    # 시작 시간: 2024-10-20 11:00:00
+    start_time = datetime(2024, 10, 20, 11, 0, 0)
+    vehicle_ids = ['VHC-001', 'VHC-002', 'VHC-003']
+    
+    telemetry_data = []
+    
+    for vehicle_id in vehicle_ids:
+        print(f"  - {vehicle_id} 데이터 생성 중...")
+        
+        # 각 차량마다 다른 기본 패턴 설정
+        base_speed = 60.0 if vehicle_id == 'VHC-001' else (55.0 if vehicle_id == 'VHC-002' else 65.0)
+        base_rpm = 2000 if vehicle_id == 'VHC-001' else (1800 if vehicle_id == 'VHC-002' else 2200)
+        
+        for second in range(3600):  # 1시간 = 3600초
+            timestamp = start_time + timedelta(seconds=second)
+            
+            # 속도 변화 (정현파 + 랜덤)
+            speed_variation = random.uniform(-5, 5) + 10 * (0.5 + 0.5 * (second % 600) / 600)
+            vehicle_speed = base_speed + speed_variation
+            vehicle_speed = max(0, min(120, vehicle_speed))  # 0-120 km/h
+            
+            # RPM은 속도에 비례 + 랜덤 변동
+            engine_rpm = int(base_rpm + (vehicle_speed - base_speed) * 30 + random.uniform(-100, 100))
+            engine_rpm = max(800, min(6000, engine_rpm))  # 800-6000 RPM
+            
+            # 스로틀 위치 (0-100%)
+            throttle_position = (vehicle_speed / 120) * 100 + random.uniform(-5, 5)
+            throttle_position = max(0, min(100, throttle_position))
+            
+            telemetry_data.append({
+                'vehicle_id': vehicle_id,
+                'vehicle_speed': round(vehicle_speed, 2),
+                'engine_rpm': engine_rpm,
+                'throttle_position': round(throttle_position, 2),
+                'timestamp': timestamp.isoformat()
+            })
+    
+    print(f"✅ 총 {len(telemetry_data)}개 텔레메트리 레코드 생성 완료")
+    return telemetry_data
+
 def migrate_data():
     """데이터 마이그레이션 실행"""
     print("🚀 TimescaleDB 데이터 마이그레이션 시작...")
     
-    # TimescaleDB 초기화
+    # 1. 기존 데이터 초기화 (선택적)
+    user_input = input("기존 데이터를 초기화하시겠습니까? (y/N): ").strip().lower()
+    if user_input == 'y':
+        if not clear_existing_data():
+            return False
+    
+    # 2. TimescaleDB 초기화
     if not init_timescaledb():
         print("❌ TimescaleDB 초기화 실패")
         return False
@@ -150,7 +233,29 @@ def migrate_data():
     
     print(f"✅ 충돌 이벤트 {collision_count}개 마이그레이션 완료")
     
-    print(f"🎉 마이그레이션 완료! 총 {engine_off_count + collision_count}개 이벤트")
+    # 3. 텔레메트리 데이터 마이그레이션
+    print("\n📊 텔레메트리 데이터 마이그레이션 중...")
+    telemetry_data = generate_telemetry_data()
+    
+    # 배치 단위로 삽입 (성능 최적화)
+    batch_size = 1000
+    total_batches = (len(telemetry_data) + batch_size - 1) // batch_size
+    
+    for i in range(0, len(telemetry_data), batch_size):
+        batch = telemetry_data[i:i+batch_size]
+        batch_num = (i // batch_size) + 1
+        print(f"  배치 {batch_num}/{total_batches} 처리 중...")
+        if not batch_write_telemetry_data(batch):
+            print(f"❌ 배치 {batch_num} 마이그레이션 실패")
+            return False
+    
+    print(f"✅ 텔레메트리 데이터 {len(telemetry_data)}개 마이그레이션 완료")
+    
+    print(f"\n🎉 마이그레이션 완료!")
+    print(f"  - 엔진 오프 이벤트: {engine_off_count}개")
+    print(f"  - 충돌 이벤트: {collision_count}개")
+    print(f"  - 텔레메트리 데이터: {len(telemetry_data)}개")
+    print(f"  - 총 레코드: {engine_off_count + collision_count + len(telemetry_data)}개")
     return True
 
 if __name__ == "__main__":

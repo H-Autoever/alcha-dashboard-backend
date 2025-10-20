@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from .routers import vehicles, used_car, insurance, events
+from .routers import vehicles, used_car, insurance, events, telemetry
 from .timescaledb import init_timescaledb
 
 @asynccontextmanager
@@ -26,6 +26,7 @@ app.include_router(vehicles.router, prefix="/api")
 app.include_router(used_car.router, prefix="/api")
 app.include_router(insurance.router, prefix="/api")
 app.include_router(events.router, prefix="/api")
+app.include_router(telemetry.router, prefix="/api")
 
 @app.get("/health")
 def health():

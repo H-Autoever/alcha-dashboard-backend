@@ -1,63 +1,192 @@
+from typing import Any, Dict, List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-from typing import List, Dict, Any
 
+from .. import models, schemas
 from ..db import get_db
-from .. import models
 
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 
 @router.get("/", response_model=List[Dict[str, Any]])
-def list_vehicles(db: Session = Depends(get_db)):
-    # vehicles 테이블에서 모든 차량 정보 반환 (메인 페이지용)
-    vehicles = db.query(models.Vehicle).all()
-    return [{"vehicle_id": v.vehicle_id, "model": v.model} for v in vehicles]
+def list_vehicles(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
+    vehicles = db.query(models.Vehicle).order_by(models.Vehicle.vehicle_id).all()
+    return [
+        {"vehicle_id": v.vehicle_id, "model": v.model, "year": v.year}
+        for v in vehicles
+    ]
 
 
 @router.get("/summary", response_model=Dict[str, int])
-def vehicles_summary(db: Session = Depends(get_db)):
+def vehicles_summary(db: Session = Depends(get_db)) -> Dict[str, int]:
     total = db.query(models.Vehicle).count()
     return {"total_vehicles": total}
 
 
 @router.get("/{vehicle_id}")
-def get_vehicle_detail(vehicle_id: str, db: Session = Depends(get_db)):
-    # vehicles 테이블에서 차량 기본 정보 조회
-    vehicle = db.query(models.Vehicle).filter(
-        models.Vehicle.vehicle_id == vehicle_id
-    ).first()
-    
+def get_vehicle_detail(vehicle_id: str, db: Session = Depends(get_db)) -> Dict[str, Any]:
+    vehicle = (
+        db.query(models.Vehicle)
+        .filter(models.Vehicle.vehicle_id == vehicle_id)
+        .first()
+    )
+
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
-    
-    # daily_metrics 테이블에서 해당 차량의 모든 일별 데이터 조회
-    daily_metrics = db.query(models.DailyMetrics).filter(
-        models.DailyMetrics.vehicle_id == vehicle_id
-    ).order_by(models.DailyMetrics.analysis_date.desc()).all()
-    
-    print(f"DEBUG: Found {len(daily_metrics)} daily metrics for vehicle_id {vehicle_id}")
-    
-    # 응답 데이터 구성
-    vehicle_info = {
-        "vehicle_id": vehicle.vehicle_id,
-        "model": vehicle.model,
-        "year": vehicle.year,
-        "daily_data": []
+
+    recent_metrics = (
+        db.query(models.DailyMetrics)
+        .filter(models.DailyMetrics.vehicle_id == vehicle_id)
+        .order_by(models.DailyMetrics.analysis_date.desc())
+        .limit(30)
+        .all()
+    )
+
+    latest_metric = recent_metrics[0] if recent_metrics else None
+
+    def serialize_metric(metric: Optional[models.DailyMetrics]) -> Optional[schemas.DailyMetric]:
+        if not metric:
+            return None
+        return schemas.DailyMetric(
+            analysis_date=metric.analysis_date,
+            total_distance=metric.total_distance,
+            average_speed=metric.average_speed,
+            fuel_efficiency=metric.fuel_efficiency,
+        )
+
+    recent_serialized = [
+        schemas.DailyMetric(
+            analysis_date=metric.analysis_date,
+            total_distance=metric.total_distance,
+            average_speed=metric.average_speed,
+            fuel_efficiency=metric.fuel_efficiency,
+        )
+        for metric in recent_metrics
+    ]
+
+    response = schemas.VehicleDetailResponse(
+        vehicle_id=vehicle.vehicle_id,
+        model=vehicle.model,
+        year=vehicle.year,
+        latest_metrics=serialize_metric(latest_metric),
+        recent_metrics=recent_serialized,
+    )
+
+    return {
+        "vehicle_id": response.vehicle_id,
+        "model": response.model,
+        "year": response.year,
+        "latest_metrics": response.latest_metrics.dict() if response.latest_metrics else None,
+        "recent_metrics": [metric.dict() for metric in response.recent_metrics],
     }
-    
-    # 모든 날짜별 데이터 추가
-    for metric in daily_metrics:
-        vehicle_info["daily_data"].append({
-            "analysis_date": metric.analysis_date.isoformat() if metric.analysis_date else None,
-            "total_distance": metric.total_distance,
-            "average_speed": metric.average_speed,
-            "fuel_efficiency": metric.fuel_efficiency,
-            "collision_events": None,  # 이제 별도 테이블에서 관리
-        })
-    
-    return vehicle_info
 
 
+@router.get("/{vehicle_id}/scores")
+def get_vehicle_scores(vehicle_id: str, db: Session = Depends(get_db)) -> Dict[str, Any]:
+    vehicle = (
+        db.query(models.Vehicle)
+        .filter(models.Vehicle.vehicle_id == vehicle_id)
+        .first()
+    )
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    scores = (
+        db.query(models.VehicleScoreDaily)
+        .filter(models.VehicleScoreDaily.vehicle_id == vehicle_id)
+        .order_by(models.VehicleScoreDaily.analysis_date.desc())
+        .all()
+    )
+
+    return {
+        "vehicle_id": vehicle_id,
+        "records": [
+            schemas.VehicleScoreDailyItem(
+                analysis_date=score.analysis_date,
+                final_score=score.final_score,
+                engine_powertrain_score=score.engine_powertrain_score,
+                transmission_drivetrain_score=score.transmission_drivetrain_score,
+                brake_suspension_score=score.brake_suspension_score,
+                adas_safety_score=score.adas_safety_score,
+                electrical_battery_score=score.electrical_battery_score,
+                other_score=score.other_score,
+                engine_rpm_avg=score.engine_rpm_avg,
+                engine_coolant_temp_avg=score.engine_coolant_temp_avg,
+                transmission_oil_temp_avg=score.transmission_oil_temp_avg,
+                battery_voltage_avg=score.battery_voltage_avg,
+                alternator_output_avg=score.alternator_output_avg,
+                temperature_ambient_avg=score.temperature_ambient_avg,
+                dtc_count=score.dtc_count,
+                gear_change_count=score.gear_change_count,
+                abs_activation_count=score.abs_activation_count,
+                suspension_shock_count=score.suspension_shock_count,
+                adas_sensor_fault_count=score.adas_sensor_fault_count,
+                aeb_activation_count=score.aeb_activation_count,
+                engine_start_count=score.engine_start_count,
+                suddenacc_count=score.suddenacc_count,
+            ).dict()
+            for score in scores
+        ],
+    }
+
+
+@router.get("/{vehicle_id}/driving-habits")
+def get_driving_habits(vehicle_id: str, db: Session = Depends(get_db)) -> Dict[str, Any]:
+    vehicle = (
+        db.query(models.Vehicle)
+        .filter(models.Vehicle.vehicle_id == vehicle_id)
+        .first()
+    )
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    habits = (
+        db.query(models.DrivingHabitMonthly)
+        .filter(models.DrivingHabitMonthly.vehicle_id == vehicle_id)
+        .order_by(models.DrivingHabitMonthly.analysis_month.desc())
+        .all()
+    )
+
+    records = [
+        schemas.DrivingHabitMonthlyItem(
+            analysis_month=habit.analysis_month,
+            acceleration_events=habit.acceleration_events,
+            lane_departure_events=habit.lane_departure_events,
+            night_drive_ratio=habit.night_drive_ratio,
+            avg_drive_duration_minutes=habit.avg_drive_duration_minutes,
+            avg_speed=habit.avg_speed,
+            avg_distance=habit.avg_distance,
+        )
+        for habit in habits
+    ]
+
+    latest = records[0] if records else None
+    previous = records[1] if len(records) > 1 else None
+
+    def to_dict(item: Optional[schemas.DrivingHabitMonthlyItem]) -> Optional[Dict[str, Any]]:
+        return item.dict() if item else None
+
+    def diff(
+        latest_item: Optional[schemas.DrivingHabitMonthlyItem],
+        previous_item: Optional[schemas.DrivingHabitMonthlyItem],
+    ) -> Optional[Dict[str, Optional[float]]]:
+        if not latest_item or not previous_item:
+            return None
+        return {
+            "acceleration_events": (latest_item.acceleration_events or 0) - (previous_item.acceleration_events or 0),
+            "lane_departure_events": (latest_item.lane_departure_events or 0) - (previous_item.lane_departure_events or 0),
+            "night_drive_ratio": (latest_item.night_drive_ratio or 0.0) - (previous_item.night_drive_ratio or 0.0),
+            "avg_drive_duration_minutes": (latest_item.avg_drive_duration_minutes or 0.0) - (previous_item.avg_drive_duration_minutes or 0.0),
+            "avg_speed": (latest_item.avg_speed or 0.0) - (previous_item.avg_speed or 0.0),
+            "avg_distance": (latest_item.avg_distance or 0.0) - (previous_item.avg_distance or 0.0),
+        }
+
+    return {
+        "vehicle_id": vehicle_id,
+        "latest": to_dict(latest),
+        "previous": to_dict(previous),
+        "delta": diff(latest, previous),
+        "history": [item.dict() for item in records],
+    }

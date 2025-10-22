@@ -6,57 +6,118 @@ metadata:
   namespace: default
 data:
   schema.sql: |
-    -- MySQL schema for Alcha Dashboard
-    -- Auto Deploy Test ! 
-    CREATE TABLE IF NOT EXISTS basic_info (
-        vehicle_id VARCHAR(50) PRIMARY KEY COMMENT '차량 고유 ID (예: VIN 또는 내부 ID)',
-        model VARCHAR(100) NOT NULL COMMENT '차량 모델명 (예: Tesla Model 3)',
-        year INT COMMENT '차량 연식 (예: 2023)',
-        total_distance FLOAT COMMENT '총 주행 거리 (km, Redshift에서 SUM 계산)',
-        average_speed FLOAT COMMENT '평균 주행 속도 (km/h, Redshift에서 AVG 계산)',
-        fuel_efficiency FLOAT COMMENT '연비 (km/L 또는 km/kWh, Redshift에서 SUM(distance)/SUM(fuel) 계산)',
-        collision_events TEXT COMMENT '충돌 이력 시점 목록 (comma-separated timestamps, Redshift에서 STRING_AGG(event_time, ",") 계산)',
-        analysis_date DATE COMMENT '데이터 분석 기준 일자'
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='메인 기능용 기본 차량 정보 테이블';
+    -- MySQL schema for Alcha Dashboard (vehicle tabs edition)
+    DROP TABLE IF EXISTS used_car;
+    DROP TABLE IF EXISTS insurance;
+    DROP TABLE IF EXISTS vehicle_score_daily;
+    DROP TABLE IF EXISTS driving_habit_monthly;
+    DROP TABLE IF EXISTS daily_metrics;
+    DROP TABLE IF EXISTS vehicles;
 
-    CREATE TABLE IF NOT EXISTS used_car (
-        vehicle_id VARCHAR(50) PRIMARY KEY COMMENT '차량 고유 ID',
-        engine_score INT COMMENT '엔진 상태 점수 (0-100)',
-        battery_score INT COMMENT '배터리 상태 점수 (0-100)',
-        tire_score INT COMMENT '타이어 상태 점수 (0-100)',
-        brake_score INT COMMENT '브레이크 상태 점수 (0-100)',
-        fuel_efficiency_score INT COMMENT '연비 효율 점수 (0-100)',
-        overall_grade INT COMMENT '종합 등급 (0-100)',
-        analysis_date DATE COMMENT '데이터 분석 기준 일자',
-        CONSTRAINT fk_used_car_basic_info FOREIGN KEY (vehicle_id) REFERENCES basic_info(vehicle_id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='중고차 서비스용 차량 상태 평가 테이블';
+    CREATE TABLE IF NOT EXISTS vehicles (
+        vehicle_id VARCHAR(50) PRIMARY KEY COMMENT 'Vehicle unique ID',
+        model VARCHAR(100) NOT NULL COMMENT 'Model name',
+        year INT COMMENT 'Model year',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Vehicle static metadata';
 
-    CREATE TABLE IF NOT EXISTS insurance (
-        vehicle_id VARCHAR(50) PRIMARY KEY COMMENT '차량 고유 ID',
-        over_speed_risk INT COMMENT '과속 위험도 점수 (0-100)',
-        sudden_accel_risk INT COMMENT '급가속/급정지 위험도 점수 (0-100)',
-        sudden_turn_risk INT COMMENT '급회전 위험도 점수 (0-100)',
-        night_drive_risk INT COMMENT '야간 주행 위험도 점수 (0-100)',
-        overall_grade INT COMMENT '종합 등급 (0-100)',
-        analysis_date DATE COMMENT '데이터 분석 기준 일자',
-        CONSTRAINT fk_insurance_basic_info FOREIGN KEY (vehicle_id) REFERENCES basic_info(vehicle_id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='보험 서비스용 위험도 평가 테이블';
+    CREATE TABLE IF NOT EXISTS daily_metrics (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        vehicle_id VARCHAR(50) NOT NULL COMMENT 'Vehicle ID',
+        total_distance FLOAT COMMENT 'Total distance (km)',
+        average_speed FLOAT COMMENT 'Average speed (km/h)',
+        fuel_efficiency FLOAT COMMENT 'Fuel efficiency (km/kWh or km/L)',
+        analysis_date DATE NOT NULL COMMENT 'Data analysis date',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_daily_metrics_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles(vehicle_id) ON DELETE CASCADE,
+        UNIQUE KEY uq_daily_metrics_vehicle_date (vehicle_id, analysis_date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Daily operational metrics';
 
-    -- Seed dummy data
-    INSERT INTO basic_info (vehicle_id, model, year, total_distance, average_speed, fuel_efficiency, collision_events, analysis_date) VALUES
-    ('VHC-001', 'Hyundai Ioniq 5', 2023, 15234.5, 62.3, 6.1, '2023-09-01T12:10:00,2024-01-21T08:45:00', '2024-10-01'),
-    ('VHC-002', 'Kia EV6', 2022, 22340.9, 58.7, 6.5, '', '2024-10-01'),
-    ('VHC-003', 'Genesis GV60', 2024, 8340.2, 54.1, 6.8, '2024-05-11T14:22:00', '2024-10-01')
-    ON DUPLICATE KEY UPDATE model=VALUES(model);
+    CREATE TABLE IF NOT EXISTS vehicle_score_daily (
+        vehicle_id VARCHAR(50) NOT NULL COMMENT 'Vehicle ID',
+        analysis_date DATE NOT NULL COMMENT 'Analysis date',
+        final_score INT COMMENT 'Composite score (0-100)',
+        engine_powertrain_score INT COMMENT 'Engine / powertrain score',
+        transmission_drivetrain_score INT COMMENT 'Transmission / drivetrain score',
+        brake_suspension_score INT COMMENT 'Brake / suspension score',
+        adas_safety_score INT COMMENT 'ADAS / safety system score',
+        electrical_battery_score INT COMMENT 'Electrical / battery system score',
+        other_score INT COMMENT 'Other score',
+        engine_rpm_avg INT COMMENT 'Average engine RPM',
+        engine_coolant_temp_avg FLOAT COMMENT 'Average coolant temperature (°C)',
+        transmission_oil_temp_avg FLOAT COMMENT 'Transmission oil temperature avg (°C)',
+        battery_voltage_avg FLOAT COMMENT 'Battery voltage avg (V)',
+        alternator_output_avg FLOAT COMMENT 'Alternator output avg (V)',
+        temperature_ambient_avg FLOAT COMMENT 'Ambient temperature average (°C)',
+        dtc_count INT COMMENT 'DTC count',
+        gear_change_count INT COMMENT 'Gear change count',
+        abs_activation_count INT COMMENT 'ABS activation count',
+        suspension_shock_count INT COMMENT 'Suspension shock count',
+        adas_sensor_fault_count INT COMMENT 'ADAS sensor fault count',
+        aeb_activation_count INT COMMENT 'AEB activation count',
+        engine_start_count INT COMMENT 'Engine start count',
+        suddenacc_count INT COMMENT 'Harsh acceleration count',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (vehicle_id, analysis_date),
+        CONSTRAINT fk_score_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles(vehicle_id) ON DELETE CASCADE,
+        INDEX idx_vehicle_score_date (analysis_date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Daily vehicle evaluation scores';
 
-    INSERT INTO used_car (vehicle_id, engine_score, battery_score, tire_score, brake_score, fuel_efficiency_score, overall_grade, analysis_date) VALUES
-    ('VHC-001', 85, 90, 80, 82, 88, 85, '2024-10-01'),
-    ('VHC-002', 78, 83, 75, 80, 84, 80, '2024-10-01'),
-    ('VHC-003', 92, 94, 88, 90, 91, 91, '2024-10-01')
-    ON DUPLICATE KEY UPDATE overall_grade=VALUES(overall_grade);
+    CREATE TABLE IF NOT EXISTS driving_habit_monthly (
+        vehicle_id VARCHAR(50) NOT NULL COMMENT 'Vehicle ID',
+        analysis_month DATE NOT NULL COMMENT 'Month (use first day of month)',
+        acceleration_events INT COMMENT 'Acceleration events count',
+        lane_departure_events INT COMMENT 'Lane departure count',
+        night_drive_ratio FLOAT COMMENT 'Night driving ratio (0~1)',
+        avg_drive_duration_minutes FLOAT COMMENT 'Average drive duration (minutes)',
+        avg_speed FLOAT COMMENT 'Average speed (km/h)',
+        avg_distance FLOAT COMMENT 'Average distance per trip (km)',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (vehicle_id, analysis_month),
+        CONSTRAINT fk_habit_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles(vehicle_id) ON DELETE CASCADE,
+        INDEX idx_habit_month (analysis_month)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Monthly driving habit aggregates';
 
-    INSERT INTO insurance (vehicle_id, over_speed_risk, sudden_accel_risk, sudden_turn_risk, night_drive_risk, overall_grade, analysis_date) VALUES
-    ('VHC-001', 40, 35, 30, 45, 38, '2024-10-01'),
-    ('VHC-002', 55, 50, 48, 60, 53, '2024-10-01'),
-    ('VHC-003', 25, 20, 22, 30, 24, '2024-10-01')
-    ON DUPLICATE KEY UPDATE overall_grade=VALUES(overall_grade);
+    INSERT INTO vehicles (vehicle_id, model, year) VALUES
+    ('VHC-001', 'Hyundai IONIQ 5', 2022),
+    ('VHC-002', 'Kia EV6', 2023),
+    ('VHC-003', 'Genesis GV60', 2024);
+
+    INSERT INTO daily_metrics (vehicle_id, total_distance, average_speed, fuel_efficiency, analysis_date) VALUES
+    ('VHC-001', 15200.3, 58.2, 6.8, '2024-10-01'),
+    ('VHC-001', 15325.7, 58.8, 6.7, '2024-10-02'),
+    ('VHC-001', 15450.1, 58.5, 6.9, '2024-10-03'),
+    ('VHC-002', 17800.5, 61.4, 6.5, '2024-10-01'),
+    ('VHC-002', 17925.9, 62.0, 6.4, '2024-10-02'),
+    ('VHC-002', 18050.2, 61.7, 6.6, '2024-10-03'),
+    ('VHC-003', 16500.8, 63.7, 6.1, '2024-10-01'),
+    ('VHC-003', 16625.2, 64.3, 6.0, '2024-10-02'),
+    ('VHC-003', 16750.5, 64.0, 6.2, '2024-10-03');
+
+    INSERT INTO vehicle_score_daily (
+    vehicle_id, analysis_date, final_score,
+    engine_powertrain_score, transmission_drivetrain_score,
+    brake_suspension_score, adas_safety_score,
+    electrical_battery_score, other_score,
+        engine_rpm_avg, engine_coolant_temp_avg,
+        transmission_oil_temp_avg, battery_voltage_avg,
+        alternator_output_avg, temperature_ambient_avg,
+        dtc_count, gear_change_count,
+        abs_activation_count, suspension_shock_count,
+        adas_sensor_fault_count, aeb_activation_count,
+        engine_start_count, suddenacc_count
+    ) VALUES
+    ('VHC-001', '2024-10-03', 86, 88, 84, 85, 87, 90, 82,
+     2150, 82.4, 78.6, 13.8, 14.5, 21.5, 2, 42, 3, 5, 0, 2, 8, 4),
+    ('VHC-002', '2024-10-03', 79, 81, 78, 77, 80, 82, 76,
+     2040, 84.3, 80.2, 13.6, 14.2, 22.1, 3, 48, 4, 6, 1, 3, 9, 6),
+    ('VHC-003', '2024-10-03', 91, 92, 90, 89, 93, 94, 88,
+     1985, 80.1, 75.5, 13.9, 14.7, 20.4, 1, 35, 1, 3, 0, 1, 6, 2);
+
+    INSERT INTO driving_habit_monthly (
+        vehicle_id, analysis_month, acceleration_events, lane_departure_events,
+        night_drive_ratio, avg_drive_duration_minutes, avg_speed, avg_distance
+    ) VALUES
+    ('VHC-001', '2024-10-01', 135, 6, 0.25, 44.1, 59.0, 38.2),
+    ('VHC-002', '2024-10-01', 105, 9, 0.32, 41.0, 61.2, 33.1),
+    ('VHC-003', '2024-10-01', 81, 4, 0.19, 47.6, 63.2, 41.5);

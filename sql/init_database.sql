@@ -81,7 +81,10 @@ CREATE TABLE IF NOT EXISTS driving_habit_monthly (
 INSERT INTO vehicles (vehicle_id, model, year) VALUES
 ('VHC-001', 'Hyundai IONIQ 5', 2022),
 ('VHC-002', 'Kia EV6', 2023),
-('VHC-003', 'Genesis GV60', 2024);
+('VHC-003', 'Genesis GV60', 2024)
+ON DUPLICATE KEY UPDATE
+    model = VALUES(model),
+    year = VALUES(year);
 
 -- 6. Seed daily metrics (latest five days per vehicle)
 INSERT INTO daily_metrics (vehicle_id, total_distance, average_speed, fuel_efficiency, analysis_date) VALUES
@@ -99,7 +102,11 @@ INSERT INTO daily_metrics (vehicle_id, total_distance, average_speed, fuel_effic
 ('VHC-003', 16625.2, 64.3, 6.0, '2024-10-02'),
 ('VHC-003', 16750.5, 64.0, 6.2, '2024-10-03'),
 ('VHC-003', 16875.9, 64.6, 6.1, '2024-10-04'),
-('VHC-003', 17000.3, 64.9, 5.9, '2024-10-05');
+('VHC-003', 17000.3, 64.9, 5.9, '2024-10-05')
+ON DUPLICATE KEY UPDATE
+    total_distance = VALUES(total_distance),
+    average_speed = VALUES(average_speed),
+    fuel_efficiency = VALUES(fuel_efficiency);
 
 -- 7. Seed vehicle scores (three most recent days per vehicle)
 INSERT INTO vehicle_score_daily (
@@ -132,19 +139,50 @@ INSERT INTO vehicle_score_daily (
 ('VHC-003', '2024-10-04', 92, 93, 91, 90, 94, 95, 89,
  1992, 79.8, 75.1, 14.0, 14.8, 20.2, 1, 34, 1, 3, 0, 1, 6, 2),
 ('VHC-003', '2024-10-05', 93, 94, 92, 91, 95, 96, 90,
- 1998, 79.5, 74.8, 14.1, 14.8, 20.0, 0, 34, 1, 2, 0, 1, 5, 1);
+ 1998, 79.5, 74.8, 14.1, 14.8, 20.0, 0, 34, 1, 2, 0, 1, 5, 1)
+ON DUPLICATE KEY UPDATE
+    final_score = VALUES(final_score),
+    engine_powertrain_score = VALUES(engine_powertrain_score),
+    transmission_drivetrain_score = VALUES(transmission_drivetrain_score),
+    brake_suspension_score = VALUES(brake_suspension_score),
+    adas_safety_score = VALUES(adas_safety_score),
+    electrical_battery_score = VALUES(electrical_battery_score),
+    other_score = VALUES(other_score),
+    engine_rpm_avg = VALUES(engine_rpm_avg),
+    engine_coolant_temp_avg = VALUES(engine_coolant_temp_avg),
+    transmission_oil_temp_avg = VALUES(transmission_oil_temp_avg),
+    battery_voltage_avg = VALUES(battery_voltage_avg),
+    alternator_output_avg = VALUES(alternator_output_avg),
+    temperature_ambient_avg = VALUES(temperature_ambient_avg),
+    dtc_count = VALUES(dtc_count),
+    gear_change_count = VALUES(gear_change_count),
+    abs_activation_count = VALUES(abs_activation_count),
+    suspension_shock_count = VALUES(suspension_shock_count),
+    adas_sensor_fault_count = VALUES(adas_sensor_fault_count),
+    aeb_activation_count = VALUES(aeb_activation_count),
+    engine_start_count = VALUES(engine_start_count),
+    suddenacc_count = VALUES(suddenacc_count);
 
--- 8. Seed driving habit monthly data (Sep and Oct 2024)
+-- 8. Seed driving habit monthly aggregates (latest two months per vehicle)
 INSERT INTO driving_habit_monthly (
-    vehicle_id, analysis_month, acceleration_events, lane_departure_events,
-    night_drive_ratio, avg_drive_duration_minutes, avg_speed, avg_distance
+    vehicle_id, analysis_month,
+    acceleration_events, lane_departure_events,
+    night_drive_ratio, avg_drive_duration_minutes,
+    avg_speed, avg_distance
 ) VALUES
 ('VHC-001', '2024-09-01', 120, 8, 0.28, 42.5, 58.3, 36.7),
 ('VHC-001', '2024-10-01', 135, 6, 0.25, 44.1, 59.0, 38.2),
 ('VHC-002', '2024-09-01', 98, 11, 0.34, 39.8, 60.7, 32.4),
 ('VHC-002', '2024-10-01', 105, 9, 0.32, 41.0, 61.2, 33.1),
 ('VHC-003', '2024-09-01', 76, 5, 0.21, 46.3, 62.5, 40.8),
-('VHC-003', '2024-10-01', 81, 4, 0.19, 47.6, 63.2, 41.5);
+('VHC-003', '2024-10-01', 81, 4, 0.19, 47.6, 63.2, 41.5)
+ON DUPLICATE KEY UPDATE
+    acceleration_events = VALUES(acceleration_events),
+    lane_departure_events = VALUES(lane_departure_events),
+    night_drive_ratio = VALUES(night_drive_ratio),
+    avg_drive_duration_minutes = VALUES(avg_drive_duration_minutes),
+    avg_speed = VALUES(avg_speed),
+    avg_distance = VALUES(avg_distance);
 
 -- 9. Verification
 SELECT 'Database initialization completed' AS status;

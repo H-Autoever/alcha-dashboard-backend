@@ -132,6 +132,67 @@ def get_vehicle_scores(vehicle_id: str, db: Session = Depends(get_db)) -> Dict[s
     }
 
 
+@router.get("/{vehicle_id}/score/{analysis_date}")
+def get_vehicle_score_by_date(vehicle_id: str, analysis_date: str, db: Session = Depends(get_db)) -> Dict[str, Any]:
+    """특정 날짜의 차량 점수 데이터 조회"""
+    vehicle = (
+        db.query(models.Vehicle)
+        .filter(models.Vehicle.vehicle_id == vehicle_id)
+        .first()
+    )
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    # 날짜 문자열을 date 객체로 변환
+    from datetime import datetime
+    try:
+        date_obj = datetime.strptime(analysis_date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+
+    score = (
+        db.query(models.VehicleScoreDaily)
+        .filter(
+            models.VehicleScoreDaily.vehicle_id == vehicle_id,
+            models.VehicleScoreDaily.analysis_date == date_obj
+        )
+        .first()
+    )
+
+    if not score:
+        raise HTTPException(status_code=404, detail=f"No score data found for {analysis_date}")
+
+    return {
+        "vehicle_id": vehicle_id,
+        "analysis_date": analysis_date,
+        "scores": {
+            "final_score": score.final_score,
+            "engine_powertrain_score": score.engine_powertrain_score,
+            "transmission_drivetrain_score": score.transmission_drivetrain_score,
+            "brake_suspension_score": score.brake_suspension_score,
+            "adas_safety_score": score.adas_safety_score,
+            "electrical_battery_score": score.electrical_battery_score,
+            "other_score": score.other_score,
+        },
+        "metrics": {
+            "engine_rpm_avg": score.engine_rpm_avg,
+            "engine_coolant_temp_avg": score.engine_coolant_temp_avg,
+            "transmission_oil_temp_avg": score.transmission_oil_temp_avg,
+            "battery_voltage_avg": score.battery_voltage_avg,
+            "alternator_output_avg": score.alternator_output_avg,
+            "temperature_ambient_avg": score.temperature_ambient_avg,
+            "dtc_count": score.dtc_count,
+            "gear_change_count": score.gear_change_count,
+            "abs_activation_count": score.abs_activation_count,
+            "suspension_shock_count": score.suspension_shock_count,
+            "adas_sensor_fault_count": score.adas_sensor_fault_count,
+            "aeb_activation_count": score.aeb_activation_count,
+            "engine_start_count": score.engine_start_count,
+            "suddenacc_count": score.suddenacc_count,
+        }
+    }
+
+
 @router.get("/{vehicle_id}/driving-habits")
 def get_driving_habits(vehicle_id: str, db: Session = Depends(get_db)) -> Dict[str, Any]:
     vehicle = (

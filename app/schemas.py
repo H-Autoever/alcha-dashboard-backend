@@ -42,6 +42,24 @@ class VehicleScoreDailyItem(BaseModel):
     suddenacc_count: Optional[int] = None
 
 
+class VehicleScoreHistoryItem(BaseModel):
+    analysis_date: date
+    final_score: Optional[int] = None
+    engine_powertrain_score: Optional[int] = None
+    transmission_drivetrain_score: Optional[int] = None
+    brake_suspension_score: Optional[int] = None
+    adas_safety_score: Optional[int] = None
+    electrical_battery_score: Optional[int] = None
+    other_score: Optional[int] = None
+
+
+class VehicleScoreHistoryResponse(BaseModel):
+    vehicle_id: str
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    records: List[VehicleScoreHistoryItem] = []
+
+
 class DrivingHabitMonthlyItem(BaseModel):
     analysis_month: date
     acceleration_events: Optional[int] = None

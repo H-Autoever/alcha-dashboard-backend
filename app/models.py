@@ -71,6 +71,7 @@ class DrivingHabitMonthly(Base):
     vehicle_id = Column(String(50), ForeignKey("vehicles.vehicle_id", ondelete="CASCADE"), primary_key=True)
     analysis_month = Column(Date, primary_key=True)
     acceleration_events = Column(Integer)
+    deceleration_events = Column(Integer)
     lane_departure_events = Column(Integer)
     night_drive_ratio = Column(Float)
     avg_drive_duration_minutes = Column(Float)

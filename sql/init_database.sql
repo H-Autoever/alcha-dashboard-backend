@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS driving_habit_monthly (
     vehicle_id VARCHAR(50) NOT NULL,
     analysis_month DATE NOT NULL,
     acceleration_events INT,
+    deceleration_events INT,
     lane_departure_events INT,
     night_drive_ratio FLOAT,
     avg_drive_duration_minutes FLOAT,
@@ -166,23 +167,60 @@ ON DUPLICATE KEY UPDATE
 -- 8. Seed driving habit monthly aggregates (latest two months per vehicle)
 INSERT INTO driving_habit_monthly (
     vehicle_id, analysis_month,
-    acceleration_events, lane_departure_events,
+    acceleration_events, deceleration_events, lane_departure_events,
     night_drive_ratio, avg_drive_duration_minutes,
     avg_speed, avg_distance
 ) VALUES
-('VHC-001', '2024-09-01', 120, 8, 0.28, 42.5, 58.3, 36.7),
-('VHC-001', '2024-10-01', 135, 6, 0.25, 44.1, 59.0, 38.2),
-('VHC-002', '2024-09-01', 98, 11, 0.34, 39.8, 60.7, 32.4),
-('VHC-002', '2024-10-01', 105, 9, 0.32, 41.0, 61.2, 33.1),
-('VHC-003', '2024-09-01', 76, 5, 0.21, 46.3, 62.5, 40.8),
-('VHC-003', '2024-10-01', 81, 4, 0.19, 47.6, 63.2, 41.5)
+('VHC-001', '2025-09-30', 110, 8, 5, 0.24, 40.2, 60.5, 37.0),
+('VHC-001', '2025-10-30', 95, 6, 4, 0.22, 38.5, 62.1, 35.8),
+('VHC-002', '2025-09-30', 88, 7, 7, 0.30, 38.5, 61.0, 31.8),
+('VHC-002', '2025-10-30', 92, 5, 6, 0.28, 39.2, 61.8, 32.5),
+('VHC-003', '2025-09-30', 72, 4, 3, 0.18, 45.1, 63.0, 40.2),
+('VHC-003', '2025-10-30', 78, 3, 2, 0.16, 46.8, 63.8, 41.0)
 ON DUPLICATE KEY UPDATE
     acceleration_events = VALUES(acceleration_events),
+    deceleration_events = VALUES(deceleration_events),
     lane_departure_events = VALUES(lane_departure_events),
     night_drive_ratio = VALUES(night_drive_ratio),
     avg_drive_duration_minutes = VALUES(avg_drive_duration_minutes),
     avg_speed = VALUES(avg_speed),
     avg_distance = VALUES(avg_distance);
+
+-- 8. Additional Vehicle Score Data (30 days)
+-- Clear existing VHC-001 data to avoid duplicates
+DELETE FROM vehicle_score_daily WHERE vehicle_id = 'VHC-001';
+
+-- Insert 30 days of vehicle score data for VHC-001
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-22', 86, 88, 84, 70, 87, 90, 82, 2150, 82.4, 78.6, 13.8, 14.5, 21.5, 2, 42, 3, 5, 0, 2, 8, 4, '2025-10-22 06:54:40');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-21', 88, 90, 86, 65, 89, 92, 84, 2178, 81.9, 77.8, 14, 14.6, 21, 1, 41, 2, 4, 0, 1, 7, 2, '2025-10-22 06:54:40');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-20', 87, 89, 85, 68, 88, 91, 83, 2165, 82.1, 78.1, 13.9, 14.6, 21.2, 1, 40, 2, 4, 0, 1, 7, 3, '2025-10-22 06:54:40');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-19', 83, 85, 81, 62, 86, 80, 82, 2520, 86, 74, 12.3, 14.1, 23, 1, 48, 3, 4, 1, 1, 9, 3, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-18', 87, 89, 85, 72, 90, 84, 86, 2480, 84, 76, 12.5, 14.3, 21, 0, 42, 1, 2, 0, 0, 7, 1, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-17', 85, 87, 83, 66, 88, 82, 84, 2500, 85, 75, 12.4, 14.2, 22, 0, 44, 2, 3, 0, 1, 8, 2, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-16', 87, 89, 85, 71, 90, 84, 86, 2480, 84, 76, 12.5, 14.3, 21, 0, 41, 2, 2, 0, 1, 7, 1, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-15', 89, 91, 87, 75, 92, 86, 88, 2460, 82, 78, 12.7, 14.5, 19, 0, 38, 1, 1, 0, 0, 5, 1, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-14', 84, 86, 82, 63, 87, 81, 83, 2510, 87, 73, 12.2, 14, 24, 1, 46, 2, 4, 1, 1, 10, 2, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-13', 86, 88, 84, 69, 89, 83, 85, 2490, 85, 75, 12.4, 14.2, 22, 0, 43, 2, 3, 0, 1, 8, 2, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-12', 88, 90, 86, 64, 91, 85, 87, 2470, 83, 77, 12.6, 14.4, 20, 0, 40, 1, 1, 0, 0, 6, 1, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-11', 83, 85, 81, 58, 86, 80, 82, 2520, 86, 74, 12.3, 14.1, 23, 1, 48, 3, 4, 1, 1, 9, 3, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-10', 87, 89, 85, 73, 90, 84, 86, 2480, 84, 76, 12.5, 14.3, 21, 0, 42, 1, 2, 0, 0, 7, 1, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-09', 85, 87, 83, 67, 88, 82, 84, 2500, 85, 75, 12.4, 14.2, 22, 0, 44, 2, 3, 0, 1, 8, 2, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-08', 87, 89, 85, 61, 90, 84, 86, 2480, 84, 76, 12.5, 14.3, 21, 0, 41, 2, 2, 0, 1, 7, 1, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-07', 89, 91, 87, 74, 92, 86, 88, 2460, 82, 78, 12.7, 14.5, 19, 0, 38, 1, 1, 0, 0, 5, 1, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-06', 84, 86, 82, 59, 87, 81, 83, 2510, 87, 73, 12.2, 14, 24, 1, 46, 2, 4, 1, 1, 10, 2, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-05', 86, 88, 84, 70, 89, 83, 85, 2490, 85, 75, 12.4, 14.2, 22, 0, 43, 2, 3, 0, 1, 8, 2, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-04', 88, 90, 86, 65, 91, 85, 87, 2470, 83, 77, 12.6, 14.4, 20, 0, 40, 1, 1, 0, 0, 6, 1, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-03', 83, 85, 81, 55, 86, 80, 82, 2520, 86, 74, 12.3, 14.1, 23, 1, 48, 3, 4, 1, 1, 9, 3, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-02', 87, 89, 85, 72, 90, 84, 86, 2480, 84, 76, 12.5, 14.3, 21, 0, 42, 1, 2, 0, 0, 7, 1, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-10-01', 85, 87, 83, 68, 88, 82, 84, 2500, 85, 75, 12.4, 14.2, 22, 0, 44, 2, 3, 0, 1, 8, 2, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-09-30', 87, 89, 85, 63, 90, 84, 86, 2480, 84, 76, 12.5, 14.3, 21, 0, 41, 2, 2, 0, 1, 7, 1, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-09-29', 89, 91, 87, 75, 92, 86, 88, 2460, 82, 78, 12.7, 14.5, 19, 0, 38, 1, 1, 0, 0, 5, 1, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-09-28', 84, 86, 82, 57, 87, 81, 83, 2510, 87, 73, 12.2, 14, 24, 1, 46, 2, 4, 1, 1, 10, 2, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-09-27', 86, 88, 84, 69, 89, 83, 85, 2490, 85, 75, 12.4, 14.2, 22, 0, 43, 2, 3, 0, 1, 8, 2, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-09-26', 88, 90, 86, 71, 91, 85, 87, 2470, 83, 77, 12.6, 14.4, 20, 0, 40, 1, 1, 0, 0, 6, 1, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-09-25', 83, 85, 81, 54, 86, 80, 82, 2520, 86, 74, 12.3, 14.1, 23, 1, 48, 3, 4, 1, 1, 9, 3, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-09-24', 87, 89, 85, 73, 90, 84, 86, 2480, 84, 76, 12.5, 14.3, 21, 0, 42, 1, 2, 0, 0, 7, 1, '2025-10-23 11:46:03');
+INSERT INTO vehicle_score_daily VALUES ('VHC-001', '2025-09-23', 85, 87, 83, 66, 88, 82, 84, 2500, 85, 75, 12.4, 14.2, 22, 0, 45, 2, 3, 0, 1, 8, 2, '2025-10-23 11:46:03');
 
 -- 9. Verification
 SELECT 'Database initialization completed' AS status;

@@ -328,7 +328,12 @@ def get_events_for_vehicle(vehicle_id: str, start_time: str = None, end_time: st
     """특정 차량의 이벤트 데이터 조회"""
     conn = get_timescaledb_connection()
     if not conn:
-        return {"engine_off_events": [], "collision_events": []}
+        return {
+            "engine_off_events": [], 
+            "collision_events": [],
+            "sudden_acceleration_events": [],
+            "warning_light_events": []
+        }
     
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -385,14 +390,57 @@ def get_events_for_vehicle(vehicle_id: str, start_time: str = None, end_time: st
                 "timestamp": row["timestamp"].isoformat()
             })
         
+        # 급가속 이벤트 조회
+        sudden_accel_query = f"""
+            SELECT vehicle_id, vehicle_speed, throttle_position, gear_position_mode, timestamp
+            FROM sudden_acceleration_events
+            WHERE vehicle_id = %s {time_condition}
+            ORDER BY timestamp ASC
+        """
+        
+        cursor.execute(sudden_accel_query, params)
+        sudden_acceleration_events = []
+        for row in cursor.fetchall():
+            sudden_acceleration_events.append({
+                "vehicle_id": row["vehicle_id"],
+                "vehicle_speed": row["vehicle_speed"],
+                "throttle_position": row["throttle_position"],
+                "gear_position_mode": row["gear_position_mode"],
+                "timestamp": row["timestamp"].isoformat()
+            })
+        
+        # 경고등 이벤트 조회
+        warning_light_query = f"""
+            SELECT vehicle_id, warning_type, timestamp
+            FROM warning_light_events
+            WHERE vehicle_id = %s {time_condition}
+            ORDER BY timestamp ASC
+        """
+        
+        cursor.execute(warning_light_query, params)
+        warning_light_events = []
+        for row in cursor.fetchall():
+            warning_light_events.append({
+                "vehicle_id": row["vehicle_id"],
+                "warning_type": row["warning_type"],
+                "timestamp": row["timestamp"].isoformat()
+            })
+        
         return {
             "engine_off_events": engine_off_events,
-            "collision_events": collision_events
+            "collision_events": collision_events,
+            "sudden_acceleration_events": sudden_acceleration_events,
+            "warning_light_events": warning_light_events
         }
         
     except Exception as e:
         print(f"Failed to query events: {e}")
-        return {"engine_off_events": [], "collision_events": []}
+        return {
+            "engine_off_events": [], 
+            "collision_events": [],
+            "sudden_acceleration_events": [],
+            "warning_light_events": []
+        }
     finally:
         conn.close()
 

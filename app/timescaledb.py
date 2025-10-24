@@ -83,10 +83,66 @@ def init_timescaledb():
             );
         """)
         
+        # 주기적 데이터 테이블 생성 (위치, 온도, 배터리 등)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS periodic_data (
+                id SERIAL,
+                vehicle_id VARCHAR(50) NOT NULL,
+                location_latitude FLOAT,
+                location_longitude FLOAT,
+                location_altitude FLOAT,
+                temperature_cabin FLOAT,
+                temperature_ambient FLOAT,
+                battery_voltage FLOAT,
+                tpms_front_left FLOAT,
+                tpms_front_right FLOAT,
+                tpms_rear_left FLOAT,
+                tpms_rear_right FLOAT,
+                accelerometer_x FLOAT,
+                accelerometer_y FLOAT,
+                accelerometer_z FLOAT,
+                fuel_level FLOAT,
+                engine_coolant_temp FLOAT,
+                transmission_oil_temp FLOAT,
+                timestamp TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                PRIMARY KEY (id, timestamp)
+            );
+        """)
+        
+        # 급가속 이벤트 테이블 생성
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sudden_acceleration_events (
+                id SERIAL,
+                vehicle_id VARCHAR(50) NOT NULL,
+                vehicle_speed FLOAT,
+                throttle_position FLOAT,
+                gear_position_mode VARCHAR(10),
+                timestamp TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                PRIMARY KEY (id, timestamp)
+            );
+        """)
+        
+        # 경고등 이벤트 테이블 생성
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS warning_light_events (
+                id SERIAL,
+                vehicle_id VARCHAR(50) NOT NULL,
+                warning_type VARCHAR(50) NOT NULL,
+                timestamp TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                PRIMARY KEY (id, timestamp)
+            );
+        """)
+        
         # TimescaleDB 하이퍼테이블로 변환
         cursor.execute("SELECT create_hypertable('engine_off_events', 'timestamp', if_not_exists => TRUE);")
         cursor.execute("SELECT create_hypertable('collision_events', 'timestamp', if_not_exists => TRUE);")
         cursor.execute("SELECT create_hypertable('vehicle_telemetry', 'timestamp', if_not_exists => TRUE);")
+        cursor.execute("SELECT create_hypertable('periodic_data', 'timestamp', if_not_exists => TRUE);")
+        cursor.execute("SELECT create_hypertable('sudden_acceleration_events', 'timestamp', if_not_exists => TRUE);")
+        cursor.execute("SELECT create_hypertable('warning_light_events', 'timestamp', if_not_exists => TRUE);")
         
         # 인덱스 생성
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_engine_off_vehicle_id ON engine_off_events(vehicle_id);")
@@ -96,6 +152,14 @@ def init_timescaledb():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_vehicle_id ON vehicle_telemetry(vehicle_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_timestamp ON vehicle_telemetry(timestamp);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_vehicle_time ON vehicle_telemetry(vehicle_id, timestamp DESC);")
+        
+        # 새로운 테이블 인덱스
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_periodic_vehicle_id ON periodic_data(vehicle_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_periodic_timestamp ON periodic_data(timestamp);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sudden_accel_vehicle_id ON sudden_acceleration_events(vehicle_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sudden_accel_timestamp ON sudden_acceleration_events(timestamp);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_warning_vehicle_id ON warning_light_events(vehicle_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_warning_timestamp ON warning_light_events(timestamp);")
         
         conn.commit()
         print("TimescaleDB 초기화 완료")
@@ -264,7 +328,12 @@ def get_events_for_vehicle(vehicle_id: str, start_time: str = None, end_time: st
     """특정 차량의 이벤트 데이터 조회"""
     conn = get_timescaledb_connection()
     if not conn:
-        return {"engine_off_events": [], "collision_events": []}
+        return {
+            "engine_off_events": [], 
+            "collision_events": [],
+            "sudden_acceleration_events": [],
+            "warning_light_events": []
+        }
     
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -321,13 +390,136 @@ def get_events_for_vehicle(vehicle_id: str, start_time: str = None, end_time: st
                 "timestamp": row["timestamp"].isoformat()
             })
         
+        # 급가속 이벤트 조회
+        sudden_accel_query = f"""
+            SELECT vehicle_id, vehicle_speed, throttle_position, gear_position_mode, timestamp
+            FROM sudden_acceleration_events
+            WHERE vehicle_id = %s {time_condition}
+            ORDER BY timestamp ASC
+        """
+        
+        cursor.execute(sudden_accel_query, params)
+        sudden_acceleration_events = []
+        for row in cursor.fetchall():
+            sudden_acceleration_events.append({
+                "vehicle_id": row["vehicle_id"],
+                "vehicle_speed": row["vehicle_speed"],
+                "throttle_position": row["throttle_position"],
+                "gear_position_mode": row["gear_position_mode"],
+                "timestamp": row["timestamp"].isoformat()
+            })
+        
+        # 경고등 이벤트 조회
+        warning_light_query = f"""
+            SELECT vehicle_id, warning_type, timestamp
+            FROM warning_light_events
+            WHERE vehicle_id = %s {time_condition}
+            ORDER BY timestamp ASC
+        """
+        
+        cursor.execute(warning_light_query, params)
+        warning_light_events = []
+        for row in cursor.fetchall():
+            warning_light_events.append({
+                "vehicle_id": row["vehicle_id"],
+                "warning_type": row["warning_type"],
+                "timestamp": row["timestamp"].isoformat()
+            })
+        
         return {
             "engine_off_events": engine_off_events,
-            "collision_events": collision_events
+            "collision_events": collision_events,
+            "sudden_acceleration_events": sudden_acceleration_events,
+            "warning_light_events": warning_light_events
         }
         
     except Exception as e:
         print(f"Failed to query events: {e}")
-        return {"engine_off_events": [], "collision_events": []}
+        return {
+            "engine_off_events": [], 
+            "collision_events": [],
+            "sudden_acceleration_events": [],
+            "warning_light_events": []
+        }
+    finally:
+        conn.close()
+
+def write_periodic_data(vehicle_id: str, location_latitude: float, location_longitude: float, 
+                       location_altitude: float, temperature_cabin: float, temperature_ambient: float,
+                       battery_voltage: float, tpms_front_left: float, tpms_front_right: float,
+                       tpms_rear_left: float, tpms_rear_right: float, accelerometer_x: float,
+                       accelerometer_y: float, accelerometer_z: float, fuel_level: float,
+                       engine_coolant_temp: float, transmission_oil_temp: float, timestamp: str):
+    """주기적 데이터를 TimescaleDB에 기록"""
+    conn = get_timescaledb_connection()
+    if not conn:
+        return False
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO periodic_data (vehicle_id, location_latitude, location_longitude, location_altitude,
+                                     temperature_cabin, temperature_ambient, battery_voltage,
+                                     tpms_front_left, tpms_front_right, tpms_rear_left, tpms_rear_right,
+                                     accelerometer_x, accelerometer_y, accelerometer_z, fuel_level,
+                                     engine_coolant_temp, transmission_oil_temp, timestamp)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (vehicle_id, location_latitude, location_longitude, location_altitude,
+              temperature_cabin, temperature_ambient, battery_voltage,
+              tpms_front_left, tpms_front_right, tpms_rear_left, tpms_rear_right,
+              accelerometer_x, accelerometer_y, accelerometer_z, fuel_level,
+              engine_coolant_temp, transmission_oil_temp, timestamp))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Failed to write periodic data: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+def write_sudden_acceleration_event(vehicle_id: str, vehicle_speed: float, throttle_position: float,
+                                   gear_position_mode: str, timestamp: str):
+    """급가속 이벤트를 TimescaleDB에 기록"""
+    conn = get_timescaledb_connection()
+    if not conn:
+        return False
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO sudden_acceleration_events (vehicle_id, vehicle_speed, throttle_position, gear_position_mode, timestamp)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (vehicle_id, vehicle_speed, throttle_position, gear_position_mode, timestamp))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Failed to write sudden acceleration event: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+def write_warning_light_event(vehicle_id: str, warning_type: str, timestamp: str):
+    """경고등 이벤트를 TimescaleDB에 기록"""
+    conn = get_timescaledb_connection()
+    if not conn:
+        return False
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO warning_light_events (vehicle_id, warning_type, timestamp)
+            VALUES (%s, %s, %s)
+        """, (vehicle_id, warning_type, timestamp))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Failed to write warning light event: {e}")
+        conn.rollback()
+        return False
     finally:
         conn.close()

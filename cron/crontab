@@ -1,0 +1,5 @@
+# MongoDB → TimescaleDB 마이그레이션 (3분마다 실행, 이후 하루 실행으로 변경)
+*/3 * * * * cd /app && /usr/local/bin/python /app/scripts/migrate_mongodb_to_timescaledb.py >> /var/log/cron/migration.log 2>&1
+
+# 빈 줄 필요 (cron 표준)
+

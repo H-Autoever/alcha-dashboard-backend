@@ -375,6 +375,7 @@ def get_vehicle_habit_monthly(
     result = []
     for record in records:
         # 해당 월의 운전 일수 계산 (engine_start_count > 0인 날짜 수)
+        # analysis_month는 이미 Date 타입이므로 직접 사용
         year = record.analysis_month.year
         month_num = record.analysis_month.month
         

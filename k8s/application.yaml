@@ -7,7 +7,7 @@ metadata:
     - resources-finalizer.argocd.argocd.argoproj.io
   annotations:
     # 1. 업데이트할 이미지 목록과 alias (backend) 정의
-    argocd-image-updater.argoproj.io/image-list: backend=577012215958.dkr.ecr.ap-northeast-2.amazonaws.com/alcha/dashboard-backend
+    argocd-image-updater.argoproj.io/image-list: backend=504554670497.dkr.ecr.ap-northeast-2.amazonaws.com/alcha/dashboard-backend
     
     # 2. 가장 최근에 푸시된 태그를 사용하도록 설정
     argocd-image-updater.argoproj.io/backend.update-strategy: newest-build
@@ -16,7 +16,7 @@ metadata:
     argocd-image-updater.argoproj.io/backend.allow-tags: regexp:^[0-9a-f]{40}$
     
     # 4. Kustomize 이미지 태그 업데이트 위치 지정
-    argocd-image-updater.argoproj.io/backend.kustomize.image: 577012215958.dkr.ecr.ap-northeast-2.amazonaws.com/alcha/dashboard-backend
+    argocd-image-updater.argoproj.io/backend.kustomize.image: 504554670497.dkr.ecr.ap-northeast-2.amazonaws.com/alcha/dashboard-backend
 spec:
   project: default
   source:

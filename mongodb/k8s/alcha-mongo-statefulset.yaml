@@ -1,0 +1,47 @@
+# MongoDB 데이터베이스를 배포하기 위한 StatefulSet 리소스 정의
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  # StatefulSet 이름
+  name: alcha-mongo
+  # 네임스페이스 명시
+  namespace: default
+spec:
+  # StatefulSet 서비스 이름
+  serviceName: alcha-mongo
+  # 실행할 파드 개수
+  replicas: 1
+  selector:
+    matchLabels:
+      # 파드 선택을 위한 라벨
+      app: alcha-mongo
+  template:
+    metadata:
+      labels:
+        # 파드 라벨
+        app: alcha-mongo
+    spec:
+      containers:
+      # MongoDB 컨테이너 이름
+      - name: alcha-mongo
+        # MongoDB 이미지
+        image: mongo:7.0
+        ports:
+        # MongoDB 기본 포트
+        - containerPort: 27017
+        envFrom:
+        # MongoDB 비밀정보를 위한 Secret 참조
+        - secretRef:
+            name: alcha-mongo-secret
+        volumeMounts:
+        # MongoDB 데이터 저장소 마운트
+        - name: alcha-mongo-storage
+          mountPath: /data/db
+      volumes:
+      # MongoDB 데이터 저장소 (호스트 경로)
+      - name: alcha-mongo-storage
+        hostPath:
+          path: /mnt/mongo
+          type: DirectoryOrCreate
+

@@ -34,6 +34,10 @@ spec:
         # 데이터베이스 이름 설정
         - name: POSTGRES_DB
           value: "alcha_events"
+        - name: POSTGRES_USER
+          value: "alcha"
+        - name: POSTGRES_PASSWORD
+          value: "alcha_password"
         envFrom:
         # TimescaleDB 비밀정보를 위한 Secret 참조
         - secretRef:

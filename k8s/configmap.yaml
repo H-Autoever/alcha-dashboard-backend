@@ -14,3 +14,9 @@ data:
   MYSQL_DB_NAME: "alcha"
   MYSQL_USER: "alcha"
   MYSQL_PASSWORD: "alcha_password"
+  # TimescaleDB 설정
+  TIMESCALEDB_HOST: "alcha-timescaledb"
+  TIMESCALEDB_PORT: "5432"
+  TIMESCALEDB_DB: "alcha_events"
+  TIMESCALEDB_USER: "alcha"
+  TIMESCALEDB_PASSWORD: "alcha_password"

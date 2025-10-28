@@ -52,13 +52,16 @@ spec:
         # 초기화 스크립트 마운트
         - name: alcha-mysql-initdb
           mountPath: /docker-entrypoint-initdb.d
-      volumes:
-      # MySQL 데이터 저장소 (호스트 경로)
-      - name: alcha-mysql-storage
-        hostPath:
-          path: /mnt/mysql
-          type: DirectoryOrCreate
       # 초기화 스크립트 ConfigMap
+      volumes:
       - name: alcha-mysql-initdb
         configMap:
           name: alcha-mysql-initdb-config
+  volumeClaimTemplates:
+  - metadata:
+      name: alcha-mysql-storage
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi

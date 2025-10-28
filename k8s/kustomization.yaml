@@ -7,6 +7,6 @@ resources:
   - configmap.yaml
 
 images:
-  - name: 577012215958.dkr.ecr.ap-northeast-2.amazonaws.com/alcha/dashboard-backend
+  - name: 504554670497.dkr.ecr.ap-northeast-2.amazonaws.com/alcha/dashboard-backend
     newTag: latest # ArgoCD Image Updater가 이 값을 자동 갱신
 

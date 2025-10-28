@@ -371,34 +371,9 @@ def get_vehicle_habit_monthly(
     if not records:
         raise HTTPException(status_code=404, detail=f"No habit data found for vehicle {vehicle_id}")
 
-    # 각 월별로 운전 일수 계산
-    result = []
-    for record in records:
-        # 해당 월의 운전 일수 계산 (engine_start_count > 0인 날짜 수)
-        # analysis_month는 이미 Date 타입이므로 직접 사용
-        year = record.analysis_month.year
-        month_num = record.analysis_month.month
-        
-        # 해당 월의 첫째 날과 마지막 날
-        from datetime import datetime
-        import calendar
-        first_day = datetime(year, month_num, 1).date()
-        last_day = calendar.monthrange(year, month_num)[1]
-        last_day_date = datetime(year, month_num, last_day).date()
-        
-        # 해당 월의 운전 일수 계산
-        driving_days = (
-            db.query(models.VehicleScoreDaily)
-            .filter(
-                models.VehicleScoreDaily.vehicle_id == vehicle_id,
-                models.VehicleScoreDaily.analysis_date >= first_day,
-                models.VehicleScoreDaily.analysis_date <= last_day_date,
-                models.VehicleScoreDaily.engine_start_count > 0
-            )
-            .count()
-        )
-        
-        result.append({
+    # 월별 데이터만 반환 (추가 계산 없음)
+    result = [
+        {
             "vehicle_id": record.vehicle_id,
             "analysis_month": record.analysis_month.isoformat(),
             "acceleration_events": record.acceleration_events,
@@ -408,8 +383,9 @@ def get_vehicle_habit_monthly(
             "avg_drive_duration_minutes": record.avg_drive_duration_minutes,
             "avg_speed": record.avg_speed,
             "avg_distance": record.avg_distance,
-            "driving_days": driving_days,
             "created_at": record.created_at.isoformat() if record.created_at else None,
-        })
+        }
+        for record in records
+    ]
     
     return result

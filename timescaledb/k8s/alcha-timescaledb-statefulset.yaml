@@ -43,9 +43,8 @@ spec:
         - name: alcha-timescaledb-storage
           mountPath: /var/lib/postgresql/data
       volumes:
-      # TimescaleDB 데이터 저장소 (호스트 경로)
+      # TimescaleDB 데이터 저장소 (PVC 사용)
       - name: alcha-timescaledb-storage
-        hostPath:
-          path: /mnt/timescaledb
-          type: DirectoryOrCreate
+        persistentVolumeClaim:
+          claimName: alcha-timescaledb-pvc
 

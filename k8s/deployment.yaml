@@ -27,7 +27,7 @@ spec:
       # 컨테이너 이름
       - name: alcha-dashboard-backend  
         # ECR에 저장된 백엔드 이미지 
-        image: 504554670497.dkr.ecr.ap-northeast-2.amazonaws.com/alcha/dashboard-backend:latest
+        image: 504554670497.dkr.ecr.ap-northeast-2.amazonaws.com/alcha/dashboard-backend
         ports:
         # 컨테이너 내부 포트 (백엔드 API 포트)
         - containerPort: 8000  

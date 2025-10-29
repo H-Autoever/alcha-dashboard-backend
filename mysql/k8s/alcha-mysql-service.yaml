@@ -8,6 +8,7 @@ metadata:
   # 네임스페이스 명시
   namespace: default
 spec:
+  clusterIP: None # StatefulSet 서비스 이름과 일치하도록 headless 설정
   selector:
     # 연결할 파드 선택 (StatefulSet의 라벨과 일치)
     app: alcha-mysql
@@ -16,5 +17,3 @@ spec:
     port: 3306
     # 컨테이너 포트 (실제 MySQL이 실행되는 포트)
     targetPort: 3306
-  # 클러스터 내부에서만 접근 가능한 서비스 타입
-  type: ClusterIP

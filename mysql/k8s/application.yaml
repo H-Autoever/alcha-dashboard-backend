@@ -9,9 +9,9 @@ spec:
   project: default
   source:
     repoURL: https://github.com/H-Autoever/alcha-dashboard-backend.git
-    targetRevision: HEAD
+    targetRevision: main
     path: mysql/k8s
-    kustomize: {}
+    kustomize: {} # 경로에 kustomization.yaml이 있을 때만 추가
   destination:
     server: https://kubernetes.default.svc
     namespace: default
@@ -21,3 +21,4 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - Replace=true # StatefulSet 삭제 후 재생성 (PVC는 유지됨)

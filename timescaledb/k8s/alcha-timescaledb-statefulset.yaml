@@ -22,6 +22,13 @@ spec:
         # 파드 라벨
         app: alcha-timescaledb
     spec:
+      initContainers:
+      - name: init-volume
+        image: busybox
+        command: ['sh', '-c', 'rm -rf /var/lib/postgresql/data/* && mkdir -p /var/lib/postgresql/data']
+        volumeMounts:
+        - name: alcha-timescaledb-storage
+          mountPath: /var/lib/postgresql/data
       containers:
       # TimescaleDB 컨테이너 이름
       - name: alcha-timescaledb

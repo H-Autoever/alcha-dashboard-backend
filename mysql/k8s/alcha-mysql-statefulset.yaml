@@ -53,17 +53,17 @@ spec:
         - name: alcha-mysql-initdb
           mountPath: /docker-entrypoint-initdb.d
       # 초기화 스크립트 ConfigMap
-    volumes: 
+      volumes: 
       - name: alcha-mysql-initdb
         configMap:
           name: alcha-mysql-initdb-config
   
-  volumeClaimTemplates:
-  - metadata:
-      name: alcha-mysql-storage
-    spec:
-      accessModes: ["ReadWriteOnce"]
-      storageClassName: gp2-immediate
-      resources:
-        requests:
-          storage: 10Gi
+        volumeClaimTemplates:
+        - metadata:
+            name: alcha-mysql-storage
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: gp2-immediate
+            resources:
+              requests:
+                storage: 10Gi

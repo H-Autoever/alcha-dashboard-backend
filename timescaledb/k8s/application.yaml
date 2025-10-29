@@ -3,12 +3,15 @@ kind: Application
 metadata:
   name: alcha-timescaledb
   namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
     repoURL: https://github.com/H-Autoever/alcha-dashboard-backend.git
     targetRevision: main
     path: timescaledb/k8s
+    kustomize: {} # 경로에 kustomization.yaml이 있을 때만 추가
   destination:
     server: https://kubernetes.default.svc
     namespace: default

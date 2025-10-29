@@ -6,4 +6,4 @@ resources:
   - configmap.yaml
 images:
   - name: 504554670497.dkr.ecr.ap-northeast-2.amazonaws.com/alcha/dashboard-backend
-    newTag: 652d9d7b42b3845aacb63cdc73b8fa78dca42b9d
+    newTag: cbe9dcc558e13135f5d71d1fb3e5976e732ce6af

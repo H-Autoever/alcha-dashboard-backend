@@ -11,7 +11,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pymongo import MongoClient
-from app.timescaledb import (
+from timescaledb import (
     init_timescaledb,
     write_telemetry_data,
     write_collision_event,
@@ -23,6 +23,14 @@ from app.timescaledb import (
 )
 from datetime import datetime
 import time
+
+def convert_vehicle_id(vehicle_id):
+    """vehicle_id를 VHC-XXX 형식으로 변환"""
+    if vehicle_id.startswith('vehicle'):
+        # vehicle1 -> VHC-001, vehicle2 -> VHC-002 등
+        vehicle_num = vehicle_id.replace('vehicle', '')
+        return f"VHC-{vehicle_num.zfill(3)}"
+    return vehicle_id
 
 # MongoDB 연결 설정
 MONGO_HOST = os.getenv("MONGO_HOST", "localhost")
@@ -67,7 +75,7 @@ def migrate_realtime_data(db):
         for doc in collection.find().sort("timestamp", 1):
             # MongoDB 문서를 TimescaleDB 형식으로 변환
             telemetry_record = {
-                "vehicle_id": doc["vehicle_id"],
+                "vehicle_id": convert_vehicle_id(doc["vehicle_id"]),
                 "vehicle_speed": doc["vehicle_speed"],
                 "engine_rpm": doc["engine_rpm"],
                 "throttle_position": doc["throttle_position"],
@@ -98,14 +106,14 @@ def migrate_periodic_data(db):
     print("📍 주기적 데이터 마이그레이션 중...")
     
     try:
-        collection = db["periodic-storage-data"]
+        collection = db["periodic_data"]
         total_count = collection.count_documents({})
         print(f"  - 총 {total_count}개 레코드 처리 예정")
         
         processed = 0
         for doc in collection.find().sort("timestamp", 1):
             if write_periodic_data(
-                vehicle_id=doc["vehicle_id"],
+                vehicle_id=convert_vehicle_id(doc["vehicle_id"]),
                 location_latitude=doc["location_latitude"],
                 location_longitude=doc["location_longitude"],
                 location_altitude=doc["location_altitude"],
@@ -141,14 +149,14 @@ def migrate_collision_events(db):
     print("💥 충돌 이벤트 마이그레이션 중...")
     
     try:
-        collection = db["event-collision"]
+        collection = db["event_collision"]
         total_count = collection.count_documents({})
         print(f"  - 총 {total_count}개 레코드 처리 예정")
         
         processed = 0
         for doc in collection.find().sort("timestamp", 1):
             if write_collision_event(
-                vehicle_id=doc["vehicle_id"],
+                vehicle_id=convert_vehicle_id(doc["vehicle_id"]),
                 damage=int(doc["damage"]),  # FLOAT을 INTEGER로 변환
                 timestamp=doc["timestamp"]
             ):
@@ -169,14 +177,14 @@ def migrate_sudden_acceleration_events(db):
     print("🚀 급가속 이벤트 마이그레이션 중...")
     
     try:
-        collection = db["event-sudden-acceleration"]
+        collection = db["event_suddenacc"]
         total_count = collection.count_documents({})
         print(f"  - 총 {total_count}개 레코드 처리 예정")
         
         processed = 0
         for doc in collection.find().sort("timestamp", 1):
             if write_sudden_acceleration_event(
-                vehicle_id=doc["vehicle_id"],
+                vehicle_id=convert_vehicle_id(doc["vehicle_id"]),
                 vehicle_speed=doc["vehicle_speed"],
                 throttle_position=doc["throttle_position"],
                 gear_position_mode=doc["gear_position_mode"],
@@ -199,7 +207,7 @@ def migrate_engine_status_events(db):
     print("🔧 엔진 상태 이벤트 마이그레이션 중...")
     
     try:
-        collection = db["event-engine-status"]
+        collection = db["event_engine_status"]
         total_count = collection.count_documents({})
         print(f"  - 총 {total_count}개 레코드 처리 예정")
         
@@ -207,10 +215,10 @@ def migrate_engine_status_events(db):
         for doc in collection.find().sort("timestamp", 1):
             # MongoDB의 event-engine-status를 기존 engine_off_events 형식으로 변환
             if write_engine_off_event(
-                vehicle_id=doc["vehicle_id"],
+                vehicle_id=convert_vehicle_id(doc["vehicle_id"]),
                 speed=doc["vehicle_speed"],
                 gear_status=doc["gear_position_mode"],
-                gyro=doc["gyro_yaw_rate"],  # 자이로 센서 값 사용
+                gyro=doc["inclination_sensor"],  # inclination_sensor 값 사용
                 side="front",  # 기본값 설정
                 ignition=doc["engine_status_ignition"] == "ON",
                 timestamp=doc["timestamp"]
@@ -232,14 +240,14 @@ def migrate_warning_light_events(db):
     print("⚠️  경고등 이벤트 마이그레이션 중...")
     
     try:
-        collection = db["event-warning-light"]
+        collection = db["event_warning_light"]
         total_count = collection.count_documents({})
         print(f"  - 총 {total_count}개 레코드 처리 예정")
         
         processed = 0
         for doc in collection.find().sort("timestamp", 1):
             if write_warning_light_event(
-                vehicle_id=doc["vehicle_id"],
+                vehicle_id=convert_vehicle_id(doc["vehicle_id"]),
                 warning_type=doc["type"],
                 timestamp=doc["timestamp"]
             ):
@@ -260,7 +268,7 @@ def clear_timescaledb_data():
     print("🗑️  TimescaleDB 기존 데이터 초기화 중...")
     
     try:
-        from app.timescaledb import get_timescaledb_connection
+        from timescaledb import get_timescaledb_connection
         conn = get_timescaledb_connection()
         if not conn:
             print("❌ TimescaleDB 연결 실패")

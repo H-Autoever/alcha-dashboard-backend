@@ -1,0 +1,71 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: alcha-migration-cronjob
+  labels:
+    app: alcha-migration
+spec:
+  schedule: "*/3 * * * *"  # 3분마다 실행
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: alcha-migration
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: migration
+            image: python:3.11-slim
+            command: ["/bin/bash"]
+            args:
+              - -c
+              - |
+                # 필요한 패키지 설치
+                apt-get update && apt-get install -y \
+                  python3-pip \
+                  && rm -rf /var/lib/apt/lists/*
+                
+                # Python 패키지 설치
+                pip3 install pymongo psycopg2-binary python-dotenv
+                
+                # 작업 디렉토리 설정
+                cd /app
+                
+                # 마이그레이션 스크립트 실행
+                echo "🚀 MongoDB → TimescaleDB 마이그레이션 시작..."
+                python3 migrate_mongodb_to_timescaledb.py
+            env:
+            # MongoDB 연결 정보
+            - name: MONGO_HOST
+              value: "alcha-mongo"
+            - name: MONGO_PORT
+              value: "27017"
+            - name: MONGO_DB
+              value: "vehicle_data_db"
+            - name: MONGO_USER
+              value: "admin"
+            - name: MONGO_PASSWORD
+              value: "admin_password"
+            - name: MONGO_AUTH_DB
+              value: "admin"
+            # TimescaleDB 연결 정보
+            - name: TIMESCALEDB_HOST
+              value: "alcha-timescaledb"
+            - name: TIMESCALEDB_PORT
+              value: "5432"
+            - name: TIMESCALEDB_DB
+              value: "alcha_events"
+            - name: TIMESCALEDB_USER
+              value: "alcha"
+            - name: TIMESCALEDB_PASSWORD
+              value: "alcha_password"
+            volumeMounts:
+            - name: app-code
+              mountPath: /app
+          volumes:
+          - name: app-code
+            configMap:
+              name: alcha-migration-config
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3

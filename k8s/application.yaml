@@ -19,6 +19,7 @@ metadata:
     argocd-image-updater.argoproj.io/write-back-target: kustomization
     argocd-image-updater.argoproj.io/git-branch: main  
     argocd-image-updater.argoproj.io/git-commit-message: "chore: update dashboard-backend image to {{ .ImageTag }}"
+    argocd-image-updater.argoproj.io/dashboard-backend.update-strategy.param: "!spec.source.kustomize.images" #Application spec 직접 업데이트 비활성화
     
 spec:
   project: default

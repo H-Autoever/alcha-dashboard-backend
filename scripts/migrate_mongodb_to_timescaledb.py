@@ -28,11 +28,17 @@ import time
 MONGO_HOST = os.getenv("MONGO_HOST", "localhost")
 MONGO_PORT = int(os.getenv("MONGO_PORT", "27017"))
 MONGO_DB = os.getenv("MONGO_DB", "alcha_events")
+MONGO_USER = os.getenv("MONGO_USER", "")
+MONGO_PASSWORD = os.getenv("MONGO_PASSWORD", "")
+MONGO_AUTH_DB = os.getenv("MONGO_AUTH_DB", "admin")
 
 def connect_mongodb():
     """MongoDB 연결"""
     try:
-        uri = f"mongodb://{MONGO_HOST}:{MONGO_PORT}/"
+        if MONGO_USER and MONGO_PASSWORD:
+            uri = f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@{MONGO_HOST}:{MONGO_PORT}/{MONGO_DB}?authSource={MONGO_AUTH_DB}"
+        else:
+            uri = f"mongodb://{MONGO_HOST}:{MONGO_PORT}/"
         client = MongoClient(uri)
         db = client[MONGO_DB]
         
@@ -49,7 +55,7 @@ def migrate_realtime_data(db):
     print("📊 실시간 텔레메트리 데이터 마이그레이션 중...")
     
     try:
-        collection = db["realtime-storage-data"]
+        collection = db["realtime_data"]
         total_count = collection.count_documents({})
         print(f"  - 총 {total_count}개 레코드 처리 예정")
         

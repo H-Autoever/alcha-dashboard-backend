@@ -10,8 +10,7 @@ on:
       - 'Dockerfile'                                # Docker 설정 변경 시
       - 'k8s/deployment.yaml'                       # 백엔드 Deployment 변경 시
       - 'k8s/service.yaml'                          # 백엔드 Service 변경 시
-      - 'k8s/configmap.yaml'                        # 백엔드 ConfigMap 변경 시
-      - 'k8s/kustomization.yaml'                    # 백엔드 Kustomization 변경 시
+      - 'k8s/configmap.yaml'                        # 백엔드 ConfigMap 변경 시                   # 백엔드 Kustomization 변경 시
       - '.github/workflows/backend-deploy.yml'      # 이 워크플로우 파일 변경 시
 
 # 환경 변수 설정

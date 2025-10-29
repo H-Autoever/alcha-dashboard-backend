@@ -3,67 +3,50 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  # StatefulSet 이름
   name: alcha-mysql
-  # 네임스페이스 명시
   namespace: default
 spec:
-  # StatefulSet 서비스 이름
   serviceName: alcha-mysql
-  # 실행할 파드 개수
   replicas: 1
   selector:
     matchLabels:
-      # 파드 선택을 위한 라벨
       app: alcha-mysql
   template:
     metadata:
       labels:
-        # 파드 라벨
         app: alcha-mysql
     spec:
       containers:
-      # MySQL 컨테이너 이름
       - name: alcha-mysql
-        # MySQL 8.0 이미지
         image: mysql:8.0
         args:
-        # MySQL 인증 플러그인 설정
         - "--default-authentication-plugin=mysql_native_password"
-        # 문자셋 설정
         - "--character-set-server=utf8mb4"
-        # 콜레이션 설정
         - "--collation-server=utf8mb4_unicode_ci"
         ports:
-        # MySQL 기본 포트
         - containerPort: 3306
         env:
-        # 데이터베이스 이름 설정
         - name: MYSQL_DATABASE
           value: "alcha"
         envFrom:
-        # MySQL 비밀정보를 위한 Secret 참조
         - secretRef:
             name: alcha-mysql-secret
         volumeMounts:
-        # MySQL 데이터 저장소 마운트
         - name: alcha-mysql-storage
           mountPath: /var/lib/mysql
-        # 초기화 스크립트 마운트
         - name: alcha-mysql-initdb
           mountPath: /docker-entrypoint-initdb.d
-      # 초기화 스크립트 ConfigMap
-      volumes: 
+      volumes:  
       - name: alcha-mysql-initdb
         configMap:
           name: alcha-mysql-initdb-config
   
-        volumeClaimTemplates:
-        - metadata:
-            name: alcha-mysql-storage
-          spec:
-            accessModes: ["ReadWriteOnce"]
-            storageClassName: gp2-immediate
-            resources:
-              requests:
-                storage: 10Gi
+  volumeClaimTemplates:  
+  - metadata:
+      name: alcha-mysql-storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: gp2-immediate
+      resources:
+        requests:
+          storage: 10Gi

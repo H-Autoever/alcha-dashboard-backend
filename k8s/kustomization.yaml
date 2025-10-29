@@ -1,12 +1,9 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 resources:
   - deployment.yaml
   - service.yaml
   - configmap.yaml
-
 images:
   - name: 504554670497.dkr.ecr.ap-northeast-2.amazonaws.com/alcha/dashboard-backend
-    newTag: "bootstrap"  # 초기 더미값 → Image Updater가 SHA로 갱신
-
+    newTag: 652d9d7b42b3845aacb63cdc73b8fa78dca42b9d

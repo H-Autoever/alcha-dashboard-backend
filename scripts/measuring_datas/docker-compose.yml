@@ -1,0 +1,53 @@
+services:
+  # MongoDB 서비스
+  mongodb:
+    image: mongo:7.0
+    container_name: alcha-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - alcha-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # TimescaleDB 서비스
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: alcha-timescaledb
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: alcha
+      POSTGRES_PASSWORD: alcha_password
+      POSTGRES_DB: alcha_events
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+    networks:
+      - alcha-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alcha -d alcha_events"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+  timescaledb_data:
+    driver: local
+
+networks:
+  alcha-net:
+    driver: bridge
+

@@ -11,7 +11,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pymongo import MongoClient
-from timescaledb import (
+from app.timescaledb import (
     init_timescaledb,
     write_telemetry_data,
     write_collision_event,
@@ -43,10 +43,8 @@ MONGO_AUTH_DB = os.getenv("MONGO_AUTH_DB", "admin")
 def connect_mongodb():
     """MongoDB 연결"""
     try:
-        if MONGO_USER and MONGO_PASSWORD:
-            uri = f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@{MONGO_HOST}:{MONGO_PORT}/{MONGO_DB}?authSource={MONGO_AUTH_DB}"
-        else:
-            uri = f"mongodb://{MONGO_HOST}:{MONGO_PORT}/"
+        # 인증 없이 연결 (기본)
+        uri = f"mongodb://{MONGO_HOST}:{MONGO_PORT}/"
         client = MongoClient(uri)
         db = client[MONGO_DB]
         
@@ -56,6 +54,17 @@ def connect_mongodb():
         return client, db
     except Exception as e:
         print(f"❌ MongoDB 연결 실패: {e}")
+        # 인증이 필요한 경우 재시도
+        try:
+            if MONGO_USER and MONGO_PASSWORD:
+                uri = f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@{MONGO_HOST}:{MONGO_PORT}/{MONGO_DB}?authSource={MONGO_AUTH_DB}"
+                client = MongoClient(uri)
+                db = client[MONGO_DB]
+                client.admin.command('ping')
+                print("✅ MongoDB 연결 성공 (인증 사용)")
+                return client, db
+        except Exception as e2:
+            print(f"❌ MongoDB 인증 연결도 실패: {e2}")
         return None, None
 
 def migrate_realtime_data(db):
@@ -63,7 +72,7 @@ def migrate_realtime_data(db):
     print("📊 실시간 텔레메트리 데이터 마이그레이션 중...")
     
     try:
-        collection = db["realtime_data"]
+        collection = db["realtime-storage-data"]
         total_count = collection.count_documents({})
         print(f"  - 총 {total_count}개 레코드 처리 예정")
         
@@ -106,7 +115,7 @@ def migrate_periodic_data(db):
     print("📍 주기적 데이터 마이그레이션 중...")
     
     try:
-        collection = db["periodic_data"]
+        collection = db["periodic-storage-data"]
         total_count = collection.count_documents({})
         print(f"  - 총 {total_count}개 레코드 처리 예정")
         
@@ -149,7 +158,7 @@ def migrate_collision_events(db):
     print("💥 충돌 이벤트 마이그레이션 중...")
     
     try:
-        collection = db["event_collision"]
+        collection = db["event-collision"]
         total_count = collection.count_documents({})
         print(f"  - 총 {total_count}개 레코드 처리 예정")
         
@@ -177,7 +186,7 @@ def migrate_sudden_acceleration_events(db):
     print("🚀 급가속 이벤트 마이그레이션 중...")
     
     try:
-        collection = db["event_suddenacc"]
+        collection = db["event-sudden-acceleration"]
         total_count = collection.count_documents({})
         print(f"  - 총 {total_count}개 레코드 처리 예정")
         
@@ -207,18 +216,21 @@ def migrate_engine_status_events(db):
     print("🔧 엔진 상태 이벤트 마이그레이션 중...")
     
     try:
-        collection = db["event_engine_status"]
+        collection = db["event-engine-status"]
         total_count = collection.count_documents({})
         print(f"  - 총 {total_count}개 레코드 처리 예정")
         
         processed = 0
         for doc in collection.find().sort("timestamp", 1):
             # MongoDB의 event-engine-status를 기존 engine_off_events 형식으로 변환
+            # gyro_yaw_rate를 gyro 값으로 사용 (또는 평균값 계산 가능)
+            gyro_value = doc.get("gyro_yaw_rate", 0.0) if "gyro_yaw_rate" in doc else 0.0
+            
             if write_engine_off_event(
                 vehicle_id=convert_vehicle_id(doc["vehicle_id"]),
                 speed=doc["vehicle_speed"],
                 gear_status=doc["gear_position_mode"],
-                gyro=doc["inclination_sensor"],  # inclination_sensor 값 사용
+                gyro=gyro_value,
                 side="front",  # 기본값 설정
                 ignition=doc["engine_status_ignition"] == "ON",
                 timestamp=doc["timestamp"]
@@ -240,7 +252,7 @@ def migrate_warning_light_events(db):
     print("⚠️  경고등 이벤트 마이그레이션 중...")
     
     try:
-        collection = db["event_warning_light"]
+        collection = db["event-warning-light"]
         total_count = collection.count_documents({})
         print(f"  - 총 {total_count}개 레코드 처리 예정")
         
@@ -268,7 +280,7 @@ def clear_timescaledb_data():
     print("🗑️  TimescaleDB 기존 데이터 초기화 중...")
     
     try:
-        from timescaledb import get_timescaledb_connection
+        from app.timescaledb import get_timescaledb_connection
         conn = get_timescaledb_connection()
         if not conn:
             print("❌ TimescaleDB 연결 실패")

@@ -42,7 +42,7 @@ def connect_mongodb():
         print(f"❌ MongoDB 연결 실패: {e}")
         # 인증이 필요한 경우 다시 시도
         try:
-            uri = f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@{MONGO_HOST}:{MONGO_PORT}/{MONGO_DB}"
+            uri = f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@{MONGO_HOST}:{MONGO_PORT}/{MONGO_DB}?authSource=admin"
             client = MongoClient(uri)
             db = client[MONGO_DB]
             client.admin.command('ping')

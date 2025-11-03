@@ -101,8 +101,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "db_write_records_per_second{db=\"mongodb\"}",
-          "legendFormat": "MongoDB",
+          "expr": "db_write_records_per_second{db=\"mongodb\",batch_size=\"100\"}",
+          "legendFormat": "MongoDB - Batch 100",
           "refId": "A"
         },
         {
@@ -110,12 +110,66 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "db_write_records_per_second{db=\"timescaledb\"}",
-          "legendFormat": "TimescaleDB",
+          "expr": "db_write_records_per_second{db=\"mongodb\",batch_size=\"1000\"}",
+          "legendFormat": "MongoDB - Batch 1000",
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "db_write_records_per_second{db=\"mongodb\",batch_size=\"5000\"}",
+          "legendFormat": "MongoDB - Batch 5000",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "db_write_records_per_second{db=\"mongodb\",batch_size=\"10000\"}",
+          "legendFormat": "MongoDB - Batch 10000",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "db_write_records_per_second{db=\"timescaledb\",batch_size=\"100\"}",
+          "legendFormat": "TimescaleDB - Batch 100",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "db_write_records_per_second{db=\"timescaledb\",batch_size=\"1000\"}",
+          "legendFormat": "TimescaleDB - Batch 1000",
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "db_write_records_per_second{db=\"timescaledb\",batch_size=\"5000\"}",
+          "legendFormat": "TimescaleDB - Batch 5000",
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "db_write_records_per_second{db=\"timescaledb\",batch_size=\"10000\"}",
+          "legendFormat": "TimescaleDB - Batch 10000",
+          "refId": "H"
         }
       ],
-      "title": "쓰기 성능 비교 (초당 처리 레코드)",
+      "title": "쓰기 성능 비교 - 배치 크기별 (초당 처리 레코드)",
       "type": "timeseries"
     },
     {
@@ -171,8 +225,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "db_write_records_per_second{db=\"mongodb\"}",
-          "legendFormat": "MongoDB",
+          "expr": "db_write_records_per_second{db=\"mongodb\",batch_size=\"100\"}",
+          "legendFormat": "MongoDB - Batch 100",
           "refId": "A"
         },
         {
@@ -180,12 +234,66 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "db_write_records_per_second{db=\"timescaledb\"}",
-          "legendFormat": "TimescaleDB",
+          "expr": "db_write_records_per_second{db=\"mongodb\",batch_size=\"1000\"}",
+          "legendFormat": "MongoDB - Batch 1000",
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "db_write_records_per_second{db=\"mongodb\",batch_size=\"5000\"}",
+          "legendFormat": "MongoDB - Batch 5000",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "db_write_records_per_second{db=\"mongodb\",batch_size=\"10000\"}",
+          "legendFormat": "MongoDB - Batch 10000",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "db_write_records_per_second{db=\"timescaledb\",batch_size=\"100\"}",
+          "legendFormat": "TimescaleDB - Batch 100",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "db_write_records_per_second{db=\"timescaledb\",batch_size=\"1000\"}",
+          "legendFormat": "TimescaleDB - Batch 1000",
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "db_write_records_per_second{db=\"timescaledb\",batch_size=\"5000\"}",
+          "legendFormat": "TimescaleDB - Batch 5000",
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "db_write_records_per_second{db=\"timescaledb\",batch_size=\"10000\"}",
+          "legendFormat": "TimescaleDB - Batch 10000",
+          "refId": "H"
         }
       ],
-      "title": "쓰기 성능 (현재 값)",
+      "title": "쓰기 성능 - 배치 크기별 (현재 값)",
       "type": "gauge"
     },
     {
@@ -443,14 +551,14 @@
       "id": 5,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": ["mean", "max", "last"],
+          "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
-          "mode": "single",
-          "sort": "none"
+          "mode": "multi",
+          "sort": "desc"
         }
       },
       "targets": [
@@ -460,7 +568,7 @@
             "uid": "prometheus"
           },
           "expr": "db_write_records_per_second{db=\"mongodb\",batch_size=\"100\"}",
-          "legendFormat": "MongoDB Batch 100",
+          "legendFormat": "MongoDB - Batch 100",
           "refId": "A"
         },
         {
@@ -469,7 +577,7 @@
             "uid": "prometheus"
           },
           "expr": "db_write_records_per_second{db=\"mongodb\",batch_size=\"1000\"}",
-          "legendFormat": "MongoDB Batch 1000",
+          "legendFormat": "MongoDB - Batch 1000",
           "refId": "B"
         },
         {
@@ -478,7 +586,7 @@
             "uid": "prometheus"
           },
           "expr": "db_write_records_per_second{db=\"mongodb\",batch_size=\"5000\"}",
-          "legendFormat": "MongoDB Batch 5000",
+          "legendFormat": "MongoDB - Batch 5000",
           "refId": "C"
         },
         {
@@ -487,7 +595,7 @@
             "uid": "prometheus"
           },
           "expr": "db_write_records_per_second{db=\"mongodb\",batch_size=\"10000\"}",
-          "legendFormat": "MongoDB Batch 10000",
+          "legendFormat": "MongoDB - Batch 10000",
           "refId": "D"
         },
         {
@@ -496,7 +604,7 @@
             "uid": "prometheus"
           },
           "expr": "db_write_records_per_second{db=\"timescaledb\",batch_size=\"100\"}",
-          "legendFormat": "TimescaleDB Batch 100",
+          "legendFormat": "TimescaleDB - Batch 100",
           "refId": "E"
         },
         {
@@ -505,7 +613,7 @@
             "uid": "prometheus"
           },
           "expr": "db_write_records_per_second{db=\"timescaledb\",batch_size=\"1000\"}",
-          "legendFormat": "TimescaleDB Batch 1000",
+          "legendFormat": "TimescaleDB - Batch 1000",
           "refId": "F"
         },
         {
@@ -514,7 +622,7 @@
             "uid": "prometheus"
           },
           "expr": "db_write_records_per_second{db=\"timescaledb\",batch_size=\"5000\"}",
-          "legendFormat": "TimescaleDB Batch 5000",
+          "legendFormat": "TimescaleDB - Batch 5000",
           "refId": "G"
         },
         {
@@ -523,11 +631,11 @@
             "uid": "prometheus"
           },
           "expr": "db_write_records_per_second{db=\"timescaledb\",batch_size=\"10000\"}",
-          "legendFormat": "TimescaleDB Batch 10000",
+          "legendFormat": "TimescaleDB - Batch 10000",
           "refId": "H"
         }
       ],
-      "title": "배치 크기별 쓰기 성능 비교",
+      "title": "배치 크기별 쓰기 성능 비교 (시간 경과)",
       "type": "timeseries"
     }
   ],

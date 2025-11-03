@@ -3,6 +3,7 @@
 MongoDB vs TimescaleDB 실제 성능 검증 테스트
 - 데이터에 기반한 실제 측정값만 표시
 - 좋게 포장하지 않고 실제 결과만 제시
+- Prometheus 메트릭 export 지원
 """
 
 import sys
@@ -12,6 +13,7 @@ from pymongo import MongoClient
 import psycopg2
 from datetime import datetime, timedelta
 import random
+from prometheus_client import start_http_server, Gauge, Histogram
 
 # MongoDB 연결
 MONGO_HOST = os.getenv("MONGO_HOST", "localhost")
@@ -24,6 +26,36 @@ TIMESCALEDB_PORT = int(os.getenv("TIMESCALEDB_PORT", "5432"))
 TIMESCALEDB_DB = os.getenv("TIMESCALEDB_DB", "alcha_events")
 TIMESCALEDB_USER = os.getenv("TIMESCALEDB_USER", "alcha")
 TIMESCALEDB_PASSWORD = os.getenv("TIMESCALEDB_PASSWORD", "alcha_password")
+
+# Prometheus 메트릭 설정
+METRICS_PORT = int(os.getenv("METRICS_PORT", "8000"))
+
+# Prometheus 메트릭 정의
+db_write_records_per_second = Gauge(
+    'db_write_records_per_second',
+    '초당 쓰기 처리 레코드 수',
+    ['db', 'batch_size']
+)
+
+db_write_time_seconds = Histogram(
+    'db_write_time_seconds',
+    '쓰기 작업 소요 시간 (초)',
+    ['db', 'batch_size'],
+    buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0]
+)
+
+db_read_query_time_seconds = Histogram(
+    'db_read_query_time_seconds',
+    '읽기 쿼리 소요 시간 (초)',
+    ['db', 'query_type'],
+    buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
+)
+
+db_read_query_time_gauge = Gauge(
+    'db_read_query_time_gauge_seconds',
+    '읽기 쿼리 소요 시간 (초) - 게이지',
+    ['db', 'query_type']
+)
 
 def connect_mongodb():
     """MongoDB 연결"""
@@ -114,6 +146,10 @@ def test_mongodb_write_performance(db_mongo):
         print(f"    - 총 시간: {total_time*1000:.2f}ms")
         print(f"    - 초당 처리: {records_per_second:.0f} 레코드/초")
         print(f"    - 배치당 평균: {avg_time_per_batch*1000:.2f}ms")
+        
+        # Prometheus 메트릭 업데이트
+        db_write_records_per_second.labels(db='mongodb', batch_size=str(batch_size)).set(records_per_second)
+        db_write_time_seconds.labels(db='mongodb', batch_size=str(batch_size)).observe(total_time)
     
     # 최적 배치 크기
     best = max(results, key=lambda x: x['records_per_second'])
@@ -204,6 +240,10 @@ def test_timescaledb_write_performance(conn_tsdb):
         print(f"    - 총 시간: {total_time*1000:.2f}ms")
         print(f"    - 초당 처리: {records_per_second:.0f} 레코드/초")
         print(f"    - 배치당 평균: {avg_time_per_batch*1000:.2f}ms")
+        
+        # Prometheus 메트릭 업데이트
+        db_write_records_per_second.labels(db='timescaledb', batch_size=str(batch_size)).set(records_per_second)
+        db_write_time_seconds.labels(db='timescaledb', batch_size=str(batch_size)).observe(total_time)
     
     # 최적 배치 크기
     best = max(results, key=lambda x: x['records_per_second'])
@@ -348,6 +388,20 @@ def test_timescaledb_time_series_query_performance(conn_tsdb):
         print(f"    - 최소 시간: {min_time*1000:.2f}ms")
         print(f"    - 최대 시간: {max_time*1000:.2f}ms")
         print(f"    - 결과 개수: {result_count}개")
+        
+        # Prometheus 메트릭 업데이트
+        query_type_map = {
+            '시간 범위 쿼리 (1시간 데이터)': 'time_range',
+            '집계 쿼리 (평균/최대/최소)': 'aggregation',
+            '시간 기반 그룹화 (10분 단위)': 'time_grouping_10min',
+            '시간 기반 그룹화 (1분 단위)': 'time_grouping_1min',
+            '복잡한 시간 범위 집계 (다중 차량)': 'multi_vehicle_aggregation'
+        }
+        query_type = query_type_map.get(test['name'], 'unknown')
+        
+        for time_val in times:
+            db_read_query_time_seconds.labels(db='timescaledb', query_type=query_type).observe(time_val)
+        db_read_query_time_gauge.labels(db='timescaledb', query_type=query_type).set(avg_time)
     
     cursor.close()
     return results
@@ -445,6 +499,18 @@ def test_mongodb_time_series_query_performance(db_mongo):
         print(f"    - 최소 시간: {min_time*1000:.2f}ms")
         print(f"    - 최대 시간: {max_time*1000:.2f}ms")
         print(f"    - 결과 개수: {result_count}개")
+        
+        # Prometheus 메트릭 업데이트
+        query_type_map = {
+            '시간 범위 쿼리 (1시간 데이터)': 'time_range',
+            '집계 쿼리 (평균/최대/최소)': 'aggregation',
+            '시간 기반 그룹화 (10분 단위)': 'time_grouping_10min'
+        }
+        query_type = query_type_map.get(test['name'], 'unknown')
+        
+        for time_val in times:
+            db_read_query_time_seconds.labels(db='mongodb', query_type=query_type).observe(time_val)
+        db_read_query_time_gauge.labels(db='mongodb', query_type=query_type).set(avg_time)
     
     return results
 
@@ -507,8 +573,13 @@ def main():
     print("\n" + "="*80)
     print("🔬 MongoDB vs TimescaleDB 실제 성능 검증 테스트")
     print("="*80)
-    print("주의: 실제 데이터 기반 측정값만 표시, 포장 없음")
+    print("주의: 실제 데이터 기반 측정값만 표시")
     print("="*80)
+    
+    # Prometheus 메트릭 서버 시작
+    print(f"\n📊 Prometheus 메트릭 서버 시작 (포트 {METRICS_PORT})...")
+    start_http_server(METRICS_PORT)
+    print(f"✅ 메트릭 서버 시작 완료: http://localhost:{METRICS_PORT}/metrics")
     
     # 연결
     print("\n📡 데이터베이스 연결 중...")
@@ -533,6 +604,18 @@ def main():
         print("\n" + "="*80)
         print("✅ 모든 테스트 완료")
         print("="*80)
+        print(f"\n📊 Prometheus 메트릭 서버가 계속 실행 중입니다.")
+        print(f"   메트릭 엔드포인트: http://localhost:{METRICS_PORT}/metrics")
+        print(f"   Grafana 대시보드: http://localhost:3000")
+        print(f"   Prometheus UI: http://localhost:9090")
+        print(f"\n⚠️  메트릭 서버를 종료하려면 Ctrl+C를 누르세요.\n")
+        
+        # 메트릭 서버를 계속 실행하도록 대기
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("\n\n✅ 메트릭 서버 종료")
         
     except Exception as e:
         print(f"\n❌ 테스트 실패: {e}")

@@ -86,10 +86,10 @@ def test_mongodb_write_performance(db_mongo):
     test_collection = "write_performance_test"
     db_mongo[test_collection].drop()
     
-    # 테스트 데이터 생성 (10,000개 레코드)
+    # 테스트 데이터 생성 (432,000개 레코드)
     test_data = []
     base_time = datetime(2025, 9, 23, 1, 54, 26)
-    for i in range(10000):
+    for i in range(432000):
         test_data.append({
             "vehicle_id": f"VHC-{random.randint(1, 10):03d}",
             "vehicle_speed": random.uniform(20, 120),
@@ -110,7 +110,7 @@ def test_mongodb_write_performance(db_mongo):
         })
     
     # 배치 쓰기 테스트
-    batch_sizes = [100, 1000, 5000, 10000]
+    batch_sizes = [1000, 10000, 50000, 100000]
     
     print(f"\n테스트 데이터: {len(test_data)}개 레코드 준비 완료")
     print(f"배치 크기별 쓰기 성능 측정:\n")
@@ -123,12 +123,20 @@ def test_mongodb_write_performance(db_mongo):
         total_time = 0
         total_inserted = 0
         
-        for batch in batches:
+        print(f"  배치 크기 {batch_size}:")
+        print(f"    배치 개수: {len(batches)}개, 배치당 평균 레코드: {len(test_data) // len(batches)}개")
+        
+        for batch_idx, batch in enumerate(batches):
             start = time.time()
             result = db_mongo[test_collection].insert_many(batch)
             elapsed = time.time() - start
             total_time += elapsed
             total_inserted += len(result.inserted_ids)
+            
+            # 진행 상황 표시 (큰 배치의 경우)
+            if batch_size >= 10000:
+                if (batch_idx + 1) % max(1, len(batches) // 20) == 0 or (batch_idx + 1) == len(batches):
+                    print(f"      진행: {batch_idx + 1}/{len(batches)} 배치 완료... ({batch_idx * batch_size}/{len(test_data)} 레코드)")
         
         records_per_second = total_inserted / total_time
         avg_time_per_batch = total_time / len(batches)
@@ -141,11 +149,11 @@ def test_mongodb_write_performance(db_mongo):
             'avg_time_per_batch': avg_time_per_batch
         })
         
-        print(f"  배치 크기 {batch_size}:")
-        print(f"    - 총 레코드: {total_inserted}개")
-        print(f"    - 총 시간: {total_time*1000:.2f}ms")
-        print(f"    - 초당 처리: {records_per_second:.0f} 레코드/초")
-        print(f"    - 배치당 평균: {avg_time_per_batch*1000:.2f}ms")
+        print(f"    결과:")
+        print(f"      - 총 레코드: {total_inserted}개")
+        print(f"      - 총 시간: {total_time:.2f}초 ({total_time*1000:.2f}ms)")
+        print(f"      - 초당 처리: {records_per_second:.0f} 레코드/초")
+        print(f"      - 배치당 평균: {avg_time_per_batch:.2f}초 ({avg_time_per_batch*1000:.2f}ms)")
         
         # Prometheus 메트릭 업데이트
         db_write_records_per_second.labels(db='mongodb', batch_size=str(batch_size)).set(records_per_second)
@@ -185,10 +193,10 @@ def test_timescaledb_write_performance(conn_tsdb):
     cursor.execute("SELECT create_hypertable('write_performance_test', 'timestamp', if_not_exists => TRUE);")
     conn_tsdb.commit()
     
-    # 테스트 데이터 생성 (10,000개 레코드)
+    # 테스트 데이터 생성 (432,000개 레코드)
     test_data = []
     base_time = datetime(2025, 9, 23, 1, 54, 26)
-    for i in range(10000):
+    for i in range(432000):
         test_data.append((
             f"VHC-{random.randint(1, 10):03d}",
             random.uniform(20, 120),
@@ -198,7 +206,7 @@ def test_timescaledb_write_performance(conn_tsdb):
         ))
     
     # 배치 쓰기 테스트
-    batch_sizes = [100, 1000, 5000, 10000]
+    batch_sizes = [1000, 10000, 50000, 100000]
     
     print(f"\n테스트 데이터: {len(test_data)}개 레코드 준비 완료")
     print(f"배치 크기별 쓰기 성능 측정:\n")
@@ -213,7 +221,10 @@ def test_timescaledb_write_performance(conn_tsdb):
         total_time = 0
         total_inserted = 0
         
-        for batch in batches:
+        print(f"  배치 크기 {batch_size}:")
+        print(f"    배치 개수: {len(batches)}개, 배치당 평균 레코드: {len(test_data) // len(batches)}개")
+        
+        for batch_idx, batch in enumerate(batches):
             start = time.time()
             cursor.executemany("""
                 INSERT INTO write_performance_test (vehicle_id, vehicle_speed, engine_rpm, throttle_position, timestamp)
@@ -223,6 +234,11 @@ def test_timescaledb_write_performance(conn_tsdb):
             elapsed = time.time() - start
             total_time += elapsed
             total_inserted += len(batch)
+            
+            # 진행 상황 표시 (큰 배치의 경우)
+            if batch_size >= 10000:
+                if (batch_idx + 1) % max(1, len(batches) // 20) == 0 or (batch_idx + 1) == len(batches):
+                    print(f"      진행: {batch_idx + 1}/{len(batches)} 배치 완료... ({batch_idx * batch_size}/{len(test_data)} 레코드)")
         
         records_per_second = total_inserted / total_time
         avg_time_per_batch = total_time / len(batches)
@@ -235,11 +251,11 @@ def test_timescaledb_write_performance(conn_tsdb):
             'avg_time_per_batch': avg_time_per_batch
         })
         
-        print(f"  배치 크기 {batch_size}:")
-        print(f"    - 총 레코드: {total_inserted}개")
-        print(f"    - 총 시간: {total_time*1000:.2f}ms")
-        print(f"    - 초당 처리: {records_per_second:.0f} 레코드/초")
-        print(f"    - 배치당 평균: {avg_time_per_batch*1000:.2f}ms")
+        print(f"    결과:")
+        print(f"      - 총 레코드: {total_inserted}개")
+        print(f"      - 총 시간: {total_time:.2f}초 ({total_time*1000:.2f}ms)")
+        print(f"      - 초당 처리: {records_per_second:.0f} 레코드/초")
+        print(f"      - 배치당 평균: {avg_time_per_batch:.2f}초 ({avg_time_per_batch*1000:.2f}ms)")
         
         # Prometheus 메트릭 업데이트
         db_write_records_per_second.labels(db='timescaledb', batch_size=str(batch_size)).set(records_per_second)
@@ -269,7 +285,7 @@ def test_timescaledb_time_series_query_performance(conn_tsdb):
     
     tests = [
         {
-            "name": "시간 범위 쿼리 (1시간 데이터)",
+            "name": "시간 범위 쿼리 (40시간 데이터)",
             "query": """
                 SELECT vehicle_id, vehicle_speed, engine_rpm, throttle_position, timestamp
                 FROM vehicle_telemetry
@@ -278,7 +294,7 @@ def test_timescaledb_time_series_query_performance(conn_tsdb):
                   AND timestamp <= %s
                 ORDER BY timestamp ASC
             """,
-            "params": lambda vid: (vid, "2025-09-23T01:54:26Z", "2025-09-23T02:54:26Z")
+            "params": lambda vid: (vid, "2025-09-23T01:54:26Z", "2025-09-24T17:54:26Z")  # 40시간 범위
         },
         {
             "name": "집계 쿼리 (평균/최대/최소)",
@@ -296,7 +312,7 @@ def test_timescaledb_time_series_query_performance(conn_tsdb):
                   AND timestamp >= %s 
                   AND timestamp <= %s
             """,
-            "params": lambda vid: (vid, "2025-09-23T01:54:26Z", "2025-09-23T02:54:26Z")
+            "params": lambda vid: (vid, "2025-09-23T01:54:26Z", "2025-09-24T17:54:26Z")  # 40시간 범위
         },
         {
             "name": "시간 기반 그룹화 (10분 단위)",
@@ -312,7 +328,7 @@ def test_timescaledb_time_series_query_performance(conn_tsdb):
                 GROUP BY bucket
                 ORDER BY bucket ASC
             """,
-            "params": lambda vid: (vid, "2025-09-23T01:54:26Z", "2025-09-23T02:54:26Z")
+            "params": lambda vid: (vid, "2025-09-23T01:54:26Z", "2025-09-24T17:54:26Z")  # 40시간 범위
         },
         {
             "name": "시간 기반 그룹화 (1분 단위)",
@@ -328,7 +344,7 @@ def test_timescaledb_time_series_query_performance(conn_tsdb):
                 GROUP BY bucket
                 ORDER BY bucket ASC
             """,
-            "params": lambda vid: (vid, "2025-09-23T01:54:26Z", "2025-09-23T02:54:26Z")
+            "params": lambda vid: (vid, "2025-09-23T01:54:26Z", "2025-09-24T17:54:26Z")  # 40시간 범위
         },
         {
             "name": "복잡한 시간 범위 집계 (다중 차량)",
@@ -346,7 +362,7 @@ def test_timescaledb_time_series_query_performance(conn_tsdb):
                 GROUP BY vehicle_id, bucket
                 ORDER BY vehicle_id, bucket ASC
             """,
-            "params": lambda vid: ("VHC-001", "VHC-002", "VHC-003", "2025-09-23T01:54:26Z", "2025-09-23T02:54:26Z")
+            "params": lambda vid: ("VHC-001", "VHC-002", "VHC-003", "2025-09-23T01:54:26Z", "2025-09-24T17:54:26Z")  # 40시간 범위
         }
     ]
     
@@ -391,7 +407,7 @@ def test_timescaledb_time_series_query_performance(conn_tsdb):
         
         # Prometheus 메트릭 업데이트
         query_type_map = {
-            '시간 범위 쿼리 (1시간 데이터)': 'time_range',
+            '시간 범위 쿼리 (40시간 데이터)': 'time_range',
             '집계 쿼리 (평균/최대/최소)': 'aggregation',
             '시간 기반 그룹화 (10분 단위)': 'time_grouping_10min',
             '시간 기반 그룹화 (1분 단위)': 'time_grouping_1min',
@@ -416,11 +432,11 @@ def test_mongodb_time_series_query_performance(db_mongo):
     
     vehicle_id = "VHC-001"
     start_time = "2025-09-23T01:54:26Z"
-    end_time = "2025-09-23T02:54:26Z"
+    end_time = "2025-09-24T17:54:26Z"  # 40시간 후
     
     tests = [
         {
-            "name": "시간 범위 쿼리 (1시간 데이터)",
+            "name": "시간 범위 쿼리 (40시간 데이터)",
             "operation": lambda: list(db_mongo["realtime-storage-data"].find({
                 "vehicle_id": vehicle_id,
                 "timestamp": {"$gte": start_time, "$lte": end_time}
@@ -502,7 +518,7 @@ def test_mongodb_time_series_query_performance(db_mongo):
         
         # Prometheus 메트릭 업데이트
         query_type_map = {
-            '시간 범위 쿼리 (1시간 데이터)': 'time_range',
+            '시간 범위 쿼리 (40시간 데이터)': 'time_range',
             '집계 쿼리 (평균/최대/최소)': 'aggregation',
             '시간 기반 그룹화 (10분 단위)': 'time_grouping_10min'
         }
@@ -543,7 +559,7 @@ def print_comparison_summary(mongo_write, tsdb_write, tsdb_read, mongo_read):
     print(f"\n2. 시계열 읽기 성능 (평균값 기준):")
     
     common_tests = [
-        ("시간 범위 쿼리", "시간 범위 쿼리 (1시간 데이터)"),
+        ("시간 범위 쿼리", "시간 범위 쿼리 (40시간 데이터)"),
         ("집계 쿼리", "집계 쿼리 (평균/최대/최소)"),
         ("시간 기반 그룹화", "시간 기반 그룹화 (10분 단위)")
     ]

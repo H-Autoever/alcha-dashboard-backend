@@ -72,7 +72,7 @@ def clear_existing_data(db):
             print(f"  - {collection_name} 삭제 실패: {e}")
 
 def generate_realtime_data():
-    """실시간 텔레메트리 데이터 생성 (1시간 × 3차량 = 10,800개)"""
+    """실시간 텔레메트리 데이터 생성 (40시간 × 3차량 = 432,000개)"""
     print("📊 실시간 텔레메트리 데이터 생성 중...")
     
     realtime_data = []
@@ -82,7 +82,7 @@ def generate_realtime_data():
         print(f"  - {vehicle_id} 데이터 생성 중...")
         vehicle_data = []
         
-        for i in range(3600):  # 1시간 = 3600초
+        for i in range(144000):  # 40시간 = 144,000초
             current_time = BASE_TIMESTAMP + timedelta(seconds=i)
             
             # 기본 차량 상태 시뮬레이션
@@ -152,9 +152,9 @@ def generate_periodic_data():
     
     periodic_data = []
     
-    # 각 차량별로 10분마다 주기적 데이터 생성 (1시간 = 6개)
+    # 각 차량별로 10분마다 주기적 데이터 생성 (40시간 = 240개)
     for vehicle_id in VEHICLE_IDS:
-        for i in range(0, 3600, 600):  # 10분마다
+        for i in range(0, 144000, 600):  # 10분마다 (40시간 = 144,000초)
             current_time = BASE_TIMESTAMP + timedelta(seconds=i)
             
             # 서울 지역 좌표 (약간의 변동)
@@ -397,7 +397,7 @@ def main():
         # 완료 메시지
         print(f"\n🎉 MongoDB 데이터 생성 완료!")
         print(f"  📊 총 삽입된 레코드: {total_inserted}개")
-        print(f"  ⏰ 데이터 시간 범위: {BASE_TIMESTAMP.strftime('%Y-%m-%d %H:%M:%S')} ~ {(BASE_TIMESTAMP + timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')} UTC")
+        print(f"  ⏰ 데이터 시간 범위: {BASE_TIMESTAMP.strftime('%Y-%m-%d %H:%M:%S')} ~ {(BASE_TIMESTAMP + timedelta(hours=40)).strftime('%Y-%m-%d %H:%M:%S')} UTC")
         
         # 컬렉션별 통계
         print(f"\n📈 컬렉션별 통계:")

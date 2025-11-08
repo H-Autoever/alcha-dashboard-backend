@@ -9,6 +9,8 @@ MongoDB vs TimescaleDB 실제 성능 검증 테스트
 import sys
 import os
 import time
+import math
+import argparse
 from pymongo import MongoClient
 import psycopg2
 from datetime import datetime, timedelta
@@ -44,6 +46,13 @@ db_write_time_seconds = Histogram(
     buckets=[0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0]
 )
 
+db_stream_write_latency_seconds = Histogram(
+    'db_stream_write_latency_seconds',
+    '실시간 스트리밍 쓰기 시 평균 레코드 지연 시간 (초)',
+    ['db', 'mode'],
+    buckets=[0.0005, 0.001, 0.005, 0.01, 0.02, 0.05, 0.1]
+)
+
 db_read_query_time_seconds = Histogram(
     'db_read_query_time_seconds',
     '읽기 쿼리 소요 시간 (초)',
@@ -56,6 +65,79 @@ db_read_query_time_gauge = Gauge(
     '읽기 쿼리 소요 시간 (초) - 게이지',
     ['db', 'query_type']
 )
+
+
+def _generate_vehicle_timestamp(base_time, index, interval_ms):
+    """스트리밍 상황에서 타임스탬프를 생성."""
+    step_ms = interval_ms if interval_ms and interval_ms > 0 else 1
+    return (base_time + timedelta(milliseconds=index * step_ms)).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def generate_vehicle_document(index, base_time, interval_ms, rng):
+    """MongoDB용 차량 텔레메트리 도큐먼트 생성."""
+    return {
+        "vehicle_id": f"VHC-{rng.randint(1, 10):03d}",
+        "vehicle_speed": rng.uniform(20, 120),
+        "engine_rpm": rng.randint(800, 6000),
+        "throttle_position": rng.uniform(0, 100),
+        "timestamp": _generate_vehicle_timestamp(base_time, index, interval_ms),
+        "sensor_data": {
+            "temperature": rng.uniform(20, 100),
+            "pressure": rng.uniform(10, 50),
+            "additional_field_1": f"value_{index}",
+            "additional_field_2": rng.randint(1, 1000),
+            "nested_data": {
+                "x": rng.uniform(-10, 10),
+                "y": rng.uniform(-10, 10),
+                "z": rng.uniform(8, 12)
+            }
+        }
+    }
+
+
+def generate_vehicle_tuple(index, base_time, interval_ms, rng):
+    """TimescaleDB용 차량 텔레메트리 튜플 생성."""
+    return (
+        f"VHC-{rng.randint(1, 10):03d}",
+        rng.uniform(20, 120),
+        rng.randint(800, 6000),
+        rng.uniform(0, 100),
+        _generate_vehicle_timestamp(base_time, index, interval_ms)
+    )
+
+
+def _maybe_sleep_for_schedule(start_perf, index, interval_ms, jitter_ms, jitter_rng):
+    """요청된 간격에 맞춰 sleep."""
+    if (interval_ms is None or interval_ms <= 0) and (jitter_ms is None or jitter_ms <= 0):
+        return
+
+    base_ms = interval_ms if interval_ms and interval_ms > 0 else 0
+    jitter_component = 0
+    if jitter_ms and jitter_ms > 0:
+        jitter_component = jitter_rng.uniform(-jitter_ms, jitter_ms)
+
+    scheduled_ms = max(0.0, (index * base_ms) + jitter_component)
+    target_time = start_perf + (scheduled_ms / 1000.0)
+    now = time.perf_counter()
+    sleep_duration = target_time - now
+    if sleep_duration > 0:
+        time.sleep(sleep_duration)
+
+
+def _calculate_percentile(values, percentile):
+    """단순 백분위 계산."""
+    if not values:
+        return 0.0
+    sorted_vals = sorted(values)
+    k = (len(sorted_vals) - 1) * (percentile / 100.0)
+    f = math.floor(k)
+    c = math.ceil(k)
+    if f == c:
+        return sorted_vals[int(k)]
+    d0 = sorted_vals[f] * (c - k)
+    d1 = sorted_vals[c] * (k - f)
+    return d0 + d1
+
 
 def connect_mongodb():
     """MongoDB 연결"""
@@ -269,6 +351,235 @@ def test_timescaledb_write_performance(conn_tsdb):
     
     cursor.close()
     return results
+
+
+def test_mongodb_streaming_write_performance(
+    db_mongo,
+    total_records=100000,
+    interval_ms=0,
+    jitter_ms=0,
+    buffer_size=1,
+    progress_every=5000
+):
+    """MongoDB 실시간 스트리밍 쓰기 성능 검증."""
+    print("\n" + "="*80)
+    print("🚀 스트리밍 테스트: MongoDB 실시간 쓰기 성능 검증")
+    print("="*80)
+    print("목적: 이벤트 스트림 삽입 시 MongoDB 처리 성능 측정")
+    print("-"*80)
+
+    collection = db_mongo["stream_write_performance_test"]
+    collection.drop()
+
+    rng = random.Random(42)
+    jitter_rng = random.Random(4242)
+    base_time = datetime.utcnow()
+
+    buffer = []
+    inserted = 0
+    flush_count = 0
+    per_record_latencies = []
+    mode_label = f"stream_buffer_{buffer_size}"
+
+    start_perf = time.perf_counter()
+    start_wall = datetime.utcnow()
+
+    for index in range(total_records):
+        _maybe_sleep_for_schedule(start_perf, index, interval_ms, jitter_ms, jitter_rng)
+
+        buffer.append(generate_vehicle_document(index, base_time, interval_ms, rng))
+
+        if len(buffer) >= buffer_size:
+            flush_start = time.perf_counter()
+            if buffer_size == 1:
+                collection.insert_one(buffer[0])
+            else:
+                collection.insert_many(buffer, ordered=False)
+            flush_elapsed = time.perf_counter() - flush_start
+
+            per_record_latency = flush_elapsed / len(buffer)
+            per_record_latencies.extend([per_record_latency] * len(buffer))
+            db_stream_write_latency_seconds.labels(db='mongodb', mode=mode_label).observe(per_record_latency)
+
+            inserted += len(buffer)
+            flush_count += 1
+            buffer.clear()
+
+            if progress_every and inserted % progress_every == 0:
+                print(f"  진행 상황: {inserted}/{total_records} 레코드 삽입 완료")
+
+    if buffer:
+        flush_start = time.perf_counter()
+        if len(buffer) == 1:
+            collection.insert_one(buffer[0])
+        else:
+            collection.insert_many(buffer, ordered=False)
+        flush_elapsed = time.perf_counter() - flush_start
+        per_record_latency = flush_elapsed / len(buffer)
+        per_record_latencies.extend([per_record_latency] * len(buffer))
+        db_stream_write_latency_seconds.labels(db='mongodb', mode=mode_label).observe(per_record_latency)
+        inserted += len(buffer)
+        flush_count += 1
+        buffer.clear()
+
+    total_elapsed = time.perf_counter() - start_perf
+    records_per_second = inserted / total_elapsed if total_elapsed > 0 else 0
+    avg_latency = sum(per_record_latencies) / len(per_record_latencies) if per_record_latencies else 0
+    p95_latency = _calculate_percentile(per_record_latencies, 95)
+
+    print(f"\n테스트 요약 (MongoDB):")
+    print(f"  - 총 삽입 레코드: {inserted}개")
+    print(f"  - 총 경과 시간: {total_elapsed:.2f}초")
+    print(f"  - 초당 처리량: {records_per_second:.2f} 레코드/초")
+    print(f"  - 평균 레코드 지연: {avg_latency*1000:.3f}ms")
+    print(f"  - 95퍼센타일 지연: {p95_latency*1000:.3f}ms")
+    print(f"  - 버퍼 크기: {buffer_size}")
+    print(f"  - 시작 시각: {start_wall.isoformat()}Z")
+
+    db_write_records_per_second.labels(db='mongodb', batch_size=mode_label).set(records_per_second)
+    db_write_time_seconds.labels(db='mongodb', batch_size=mode_label).observe(total_elapsed)
+
+    return {
+        'mode': mode_label,
+        'total_records': inserted,
+        'total_time': total_elapsed,
+        'records_per_second': records_per_second,
+        'avg_latency': avg_latency,
+        'p95_latency': p95_latency,
+        'flush_count': flush_count,
+        'interval_ms': interval_ms,
+        'jitter_ms': jitter_ms,
+        'buffer_size': buffer_size
+    }
+
+
+def test_timescaledb_streaming_write_performance(
+    conn_tsdb,
+    total_records=100000,
+    interval_ms=0,
+    jitter_ms=0,
+    buffer_size=1,
+    commit_size=None,
+    progress_every=5000
+):
+    """TimescaleDB 실시간 스트리밍 쓰기 성능 검증."""
+    print("\n" + "="*80)
+    print("🚀 스트리밍 테스트: TimescaleDB 실시간 쓰기 성능 검증")
+    print("="*80)
+    print("목적: 이벤트 스트림 삽입 시 TimescaleDB 처리 성능 측정")
+    print("-"*80)
+
+    commit_size = commit_size or buffer_size
+    cursor = conn_tsdb.cursor()
+
+    cursor.execute("""
+        DROP TABLE IF EXISTS stream_write_performance_test CASCADE;
+    """)
+    cursor.execute("""
+        CREATE TABLE stream_write_performance_test (
+            vehicle_id VARCHAR(50) NOT NULL,
+            vehicle_speed FLOAT,
+            engine_rpm INTEGER,
+            throttle_position FLOAT,
+            timestamp TIMESTAMPTZ NOT NULL
+        );
+    """)
+    cursor.execute("SELECT create_hypertable('stream_write_performance_test', 'timestamp', if_not_exists => TRUE);")
+    conn_tsdb.commit()
+
+    rng = random.Random(42)
+    jitter_rng = random.Random(4242)
+    base_time = datetime.utcnow()
+
+    buffer = []
+    pending_commit = 0
+    inserted = 0
+    flush_count = 0
+    per_record_latencies = []
+    mode_label = f"stream_buffer_{buffer_size}_commit_{commit_size}"
+
+    start_perf = time.perf_counter()
+    start_wall = datetime.utcnow()
+
+    insert_sql = """
+        INSERT INTO stream_write_performance_test (vehicle_id, vehicle_speed, engine_rpm, throttle_position, timestamp)
+        VALUES (%s, %s, %s, %s, %s)
+    """
+
+    for index in range(total_records):
+        _maybe_sleep_for_schedule(start_perf, index, interval_ms, jitter_ms, jitter_rng)
+
+        buffer.append(generate_vehicle_tuple(index, base_time, interval_ms, rng))
+
+        if len(buffer) >= buffer_size:
+            flush_start = time.perf_counter()
+            cursor.executemany(insert_sql, buffer)
+            flush_elapsed = time.perf_counter() - flush_start
+
+            pending_commit += len(buffer)
+            per_record_latency = flush_elapsed / len(buffer)
+            per_record_latencies.extend([per_record_latency] * len(buffer))
+            db_stream_write_latency_seconds.labels(db='timescaledb', mode=mode_label).observe(per_record_latency)
+
+            inserted += len(buffer)
+            flush_count += 1
+            buffer.clear()
+
+            if pending_commit >= commit_size:
+                conn_tsdb.commit()
+                pending_commit = 0
+
+            if progress_every and inserted % progress_every == 0:
+                print(f"  진행 상황: {inserted}/{total_records} 레코드 삽입 완료")
+
+    if buffer:
+        flush_start = time.perf_counter()
+        cursor.executemany(insert_sql, buffer)
+        flush_elapsed = time.perf_counter() - flush_start
+        per_record_latency = flush_elapsed / len(buffer)
+        per_record_latencies.extend([per_record_latency] * len(buffer))
+        db_stream_write_latency_seconds.labels(db='timescaledb', mode=mode_label).observe(per_record_latency)
+
+        inserted += len(buffer)
+        flush_count += 1
+        pending_commit += len(buffer)
+        buffer.clear()
+
+    if pending_commit > 0:
+        conn_tsdb.commit()
+
+    total_elapsed = time.perf_counter() - start_perf
+    records_per_second = inserted / total_elapsed if total_elapsed > 0 else 0
+    avg_latency = sum(per_record_latencies) / len(per_record_latencies) if per_record_latencies else 0
+    p95_latency = _calculate_percentile(per_record_latencies, 95)
+
+    print(f"\n테스트 요약 (TimescaleDB):")
+    print(f"  - 총 삽입 레코드: {inserted}개")
+    print(f"  - 총 경과 시간: {total_elapsed:.2f}초")
+    print(f"  - 초당 처리량: {records_per_second:.2f} 레코드/초")
+    print(f"  - 평균 레코드 지연: {avg_latency*1000:.3f}ms")
+    print(f"  - 95퍼센타일 지연: {p95_latency*1000:.3f}ms")
+    print(f"  - 버퍼 크기: {buffer_size}, 커밋 간격: {commit_size}")
+    print(f"  - 시작 시각: {start_wall.isoformat()}Z")
+
+    db_write_records_per_second.labels(db='timescaledb', batch_size=mode_label).set(records_per_second)
+    db_write_time_seconds.labels(db='timescaledb', batch_size=mode_label).observe(total_elapsed)
+
+    cursor.close()
+
+    return {
+        'mode': mode_label,
+        'total_records': inserted,
+        'total_time': total_elapsed,
+        'records_per_second': records_per_second,
+        'avg_latency': avg_latency,
+        'p95_latency': p95_latency,
+        'flush_count': flush_count,
+        'interval_ms': interval_ms,
+        'jitter_ms': jitter_ms,
+        'buffer_size': buffer_size,
+        'commit_size': commit_size
+    }
 
 def test_timescaledb_time_series_query_performance(conn_tsdb):
     """테스트 3: TimescaleDB 시계열 데이터 처리 성능 검증"""
@@ -584,8 +895,100 @@ def print_comparison_summary(mongo_write, tsdb_write, tsdb_read, mongo_read):
     print(f"   - TimescaleDB 쓰기: {tsdb_best['records_per_second']:.0f} 레코드/초")
     print(f"   - 시계열 쿼리: 실제 측정값 기준으로 판단")
 
+
+def print_streaming_comparison_summary(mongo_stream, tsdb_stream):
+    """스트리밍 쓰기 비교 요약 출력."""
+    print("\n" + "="*80)
+    print("📊 스트리밍 쓰기 비교 요약")
+    print("="*80)
+
+    print("\nMongoDB:")
+    print(f"  - 모드: {mongo_stream['mode']}")
+    print(f"  - 초당 처리량: {mongo_stream['records_per_second']:.2f} 레코드/초")
+    print(f"  - 평균 지연: {mongo_stream['avg_latency']*1000:.3f}ms")
+    print(f"  - 95퍼센타일 지연: {mongo_stream['p95_latency']*1000:.3f}ms")
+
+    print("\nTimescaleDB:")
+    print(f"  - 모드: {tsdb_stream['mode']}")
+    print(f"  - 초당 처리량: {tsdb_stream['records_per_second']:.2f} 레코드/초")
+    print(f"  - 평균 지연: {tsdb_stream['avg_latency']*1000:.3f}ms")
+    print(f"  - 95퍼센타일 지연: {tsdb_stream['p95_latency']*1000:.3f}ms")
+
+    throughput_ratio = 0.0
+    if tsdb_stream['records_per_second'] > 0:
+        throughput_ratio = mongo_stream['records_per_second'] / tsdb_stream['records_per_second']
+
+    print("\n결론:")
+    if throughput_ratio == 0:
+        print("  - TimescaleDB throughput가 0에 가까워 비교 불가")
+    elif throughput_ratio >= 1:
+        diff = (throughput_ratio - 1) * 100
+        print(f"  - MongoDB가 {diff:.1f}% 더 빠른 스트리밍 쓰기 처리량")
+    else:
+        diff = ((1 / throughput_ratio) - 1) * 100
+        print(f"  - TimescaleDB가 {diff:.1f}% 더 빠른 스트리밍 쓰기 처리량")
+
+    print(f"  - 평균 지연 비교: MongoDB {mongo_stream['avg_latency']*1000:.3f}ms vs TimescaleDB {tsdb_stream['avg_latency']*1000:.3f}ms")
+    print("="*80)
+
+
+def parse_arguments():
+    """CLI 인자 파싱."""
+    parser = argparse.ArgumentParser(description="MongoDB vs TimescaleDB 성능 측정 도구")
+    parser.add_argument(
+        "--mode",
+        choices=["batch", "stream", "all"],
+        default="batch",
+        help="실행할 테스트 모드 선택 (기본값: batch)"
+    )
+    parser.add_argument(
+        "--stream-total-records",
+        type=int,
+        default=50000,
+        help="스트리밍 테스트 시 삽입할 총 레코드 수 (기본값: 50,000)"
+    )
+    parser.add_argument(
+        "--stream-interval-ms",
+        type=float,
+        default=0,
+        help="각 레코드 간격(ms). 0이면 가능한 빠르게 삽입 (기본값: 0)"
+    )
+    parser.add_argument(
+        "--stream-jitter-ms",
+        type=float,
+        default=0,
+        help="간격에 추가될 지터 범위(ms) (기본값: 0)"
+    )
+    parser.add_argument(
+        "--stream-buffer-size",
+        type=int,
+        default=1,
+        help="스트리밍 시 버퍼링할 레코드 수 (기본값: 1)"
+    )
+    parser.add_argument(
+        "--stream-commit-size",
+        type=int,
+        default=None,
+        help="TimescaleDB 스트리밍 시 커밋 간격 레코드 수 (기본값: 버퍼 크기)"
+    )
+    parser.add_argument(
+        "--stream-progress-every",
+        type=int,
+        default=5000,
+        help="스트리밍 진행 상황을 출력할 간격 (기본값: 5000)"
+    )
+    parser.add_argument(
+        "--skip-prometheus",
+        action="store_true",
+        help="Prometheus 메트릭 서버 실행을 생략"
+    )
+    return parser.parse_args()
+
+
 def main():
     """메인 테스트 함수"""
+    args = parse_arguments()
+
     print("\n" + "="*80)
     print("🔬 MongoDB vs TimescaleDB 실제 성능 검증 테스트")
     print("="*80)
@@ -593,9 +996,12 @@ def main():
     print("="*80)
     
     # Prometheus 메트릭 서버 시작
-    print(f"\n📊 Prometheus 메트릭 서버 시작 (포트 {METRICS_PORT})...")
-    start_http_server(METRICS_PORT)
-    print(f"✅ 메트릭 서버 시작 완료: http://localhost:{METRICS_PORT}/metrics")
+    if args.skip_prometheus:
+        print("\n⚠️  --skip-prometheus 옵션으로 메트릭 서버 실행을 생략합니다.")
+    else:
+        print(f"\n📊 Prometheus 메트릭 서버 시작 (포트 {METRICS_PORT})...")
+        start_http_server(METRICS_PORT)
+        print(f"✅ 메트릭 서버 시작 완료: http://localhost:{METRICS_PORT}/metrics")
     
     # 연결
     print("\n📡 데이터베이스 연결 중...")
@@ -604,34 +1010,61 @@ def main():
     print("✅ 연결 완료")
     
     try:
-        # 테스트 실행
         print("\n" + "="*80)
         print("테스트 시작")
         print("="*80)
+
+        mongo_write_results = tsdb_write_results = tsdb_read_results = mongo_read_results = None
+        mongo_stream_results = tsdb_stream_results = None
         
-        mongo_write_results = test_mongodb_write_performance(db_mongo)
-        tsdb_write_results = test_timescaledb_write_performance(conn_tsdb)
-        tsdb_read_results = test_timescaledb_time_series_query_performance(conn_tsdb)
-        mongo_read_results = test_mongodb_time_series_query_performance(db_mongo)
+        if args.mode in ("batch", "all"):
+            print("\n▶️ 배치 기반 테스트 실행")
+            mongo_write_results = test_mongodb_write_performance(db_mongo)
+            tsdb_write_results = test_timescaledb_write_performance(conn_tsdb)
+            tsdb_read_results = test_timescaledb_time_series_query_performance(conn_tsdb)
+            mongo_read_results = test_mongodb_time_series_query_performance(db_mongo)
+            print_comparison_summary(mongo_write_results, tsdb_write_results, tsdb_read_results, mongo_read_results)
         
-        # 비교 요약
-        print_comparison_summary(mongo_write_results, tsdb_write_results, tsdb_read_results, mongo_read_results)
+        if args.mode in ("stream", "all"):
+            print("\n▶️ 실시간 스트리밍 테스트 실행")
+            mongo_stream_results = test_mongodb_streaming_write_performance(
+                db_mongo,
+                total_records=args.stream_total_records,
+                interval_ms=args.stream_interval_ms,
+                jitter_ms=args.stream_jitter_ms,
+                buffer_size=max(1, args.stream_buffer_size),
+                progress_every=max(1, args.stream_progress_every)
+            )
+            tsdb_stream_results = test_timescaledb_streaming_write_performance(
+                conn_tsdb,
+                total_records=args.stream_total_records,
+                interval_ms=args.stream_interval_ms,
+                jitter_ms=args.stream_jitter_ms,
+                buffer_size=max(1, args.stream_buffer_size),
+                commit_size=args.stream_commit_size if args.stream_commit_size and args.stream_commit_size > 0 else None,
+                progress_every=max(1, args.stream_progress_every)
+            )
+            print_streaming_comparison_summary(mongo_stream_results, tsdb_stream_results)
         
         print("\n" + "="*80)
-        print("✅ 모든 테스트 완료")
+        print("✅ 선택한 테스트 완료")
         print("="*80)
-        print(f"\n📊 Prometheus 메트릭 서버가 계속 실행 중입니다.")
-        print(f"   메트릭 엔드포인트: http://localhost:{METRICS_PORT}/metrics")
-        print(f"   Grafana 대시보드: http://localhost:3000")
-        print(f"   Prometheus UI: http://localhost:9090")
-        print(f"\n⚠️  메트릭 서버를 종료하려면 Ctrl+C를 누르세요.\n")
-        
-        # 메트릭 서버를 계속 실행하도록 대기
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print("\n\n✅ 메트릭 서버 종료")
+
+        if args.skip_prometheus:
+            print("\nℹ️  Prometheus 메트릭 서버를 실행하지 않았으므로 프로그램을 종료합니다.")
+        else:
+            print(f"\n📊 Prometheus 메트릭 서버가 계속 실행 중입니다.")
+            print(f"   메트릭 엔드포인트: http://localhost:{METRICS_PORT}/metrics")
+            print(f"   Grafana 대시보드: http://localhost:3000")
+            print(f"   Prometheus UI: http://localhost:9090")
+            print(f"\n⚠️  메트릭 서버를 종료하려면 Ctrl+C를 누르세요.\n")
+            
+            # 메트릭 서버를 계속 실행하도록 대기
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                print("\n\n✅ 메트릭 서버 종료")
         
     except Exception as e:
         print(f"\n❌ 테스트 실패: {e}")

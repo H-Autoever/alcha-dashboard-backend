@@ -14,3 +14,11 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 5s
 
+  - job_name: 'mongodb-batch-write-performance'
+    static_configs:
+      - targets: ['host.docker.internal:8001']
+        labels:
+          service: 'mongodb-batch-write-performance-test'
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
